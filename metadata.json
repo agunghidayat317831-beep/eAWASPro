@@ -1,0 +1,8 @@
+{
+  "name": "e-AWAS Pro",
+  "description": "Aplikasi monitoring proyek pemerintah dengan dashboard statistik, dokumentasi foto, dan pemetaan lokasi proyek secara real-time.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

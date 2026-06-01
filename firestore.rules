@@ -1,0 +1,182 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "agunghidayat317831@gmail.com" || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"));
+    }
+
+    function isPPK() {
+      return isAuthenticated() && 
+        (isAdmin() || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "ppk"));
+    }
+
+    function isPengawas() {
+      return isAuthenticated() && 
+        (isPPK() || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "pengawas"));
+    }
+
+    function isUser() {
+      return isAuthenticated() && 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "user");
+    }
+
+    function isValidUser(data) {
+      return data.get('uid', '') is string &&
+             data.get('email', '') is string &&
+             data.get('role', '') in ['admin', 'pengawas', 'ppk', 'kepala_dinas', 'user'];
+    }
+
+    function isValidProject(data) {
+      return data.get('name', '') is string &&
+             data.get('location', '') is string &&
+             data.get('ptCv', '') is string &&
+             data.get('anggaran', 0) is number &&
+             data.get('progress', 0) is number &&
+             data.get('lat', 0) is number &&
+             data.get('lng', 0) is number &&
+             (data.get('contractNumber', '') is string) &&
+             (data.get('contractDate', '') is string) &&
+             (data.get('spmkDate', '') is string) &&
+             (data.get('executionPeriod', 0) is number);
+    }
+
+    function isValidProvider(data) {
+      return data.get('name', '') is string &&
+             data.get('address', '') is string &&
+             data.get('npwp', '') is string &&
+             data.get('email', '') is string &&
+             data.get('phone', '') is string;
+    }
+
+    function isValidEvaluation(data) {
+      return data.get('projectId', '') is string &&
+             data.get('projectName', '') is string &&
+             data.get('providerId', '') is string &&
+             data.get('quality', 0) is number &&
+             data.get('cost', 0) is number &&
+             data.get('time', 0) is number &&
+             data.get('service', 0) is number &&
+             data.get('totalScore', 0) is number;
+    }
+
+    function isValidAHSP(data) {
+      return data.get('code', '') is string &&
+             data.get('jobName', '') is string &&
+             data.get('roundedPrice', 0) is number;
+    }
+
+    function isValidLaborMaster(data) {
+      return data.get('description', '') is string &&
+             data.get('code', '') is string &&
+             data.get('unit', '') is string &&
+             data.get('unitPrice', 0) is number;
+    }
+
+    function isValidMaterialMaster(data) {
+      return data.get('description', '') is string &&
+             data.get('code', '') is string &&
+             data.get('unit', '') is string &&
+             data.get('unitPrice', 0) is number;
+    }
+
+    function isValidEquipmentMaster(data) {
+      return data.get('description', '') is string &&
+             data.get('code', '') is string &&
+             data.get('unit', '') is string &&
+             data.get('unitPrice', 0) is number;
+    }
+
+    function isValidRABItem(data) {
+      return data.get('ahspId', '') is string &&
+             data.get('description', '') is string &&
+             data.get('volume', 0) is number &&
+             data.get('unit', '') is string &&
+             data.get('unitPrice', 0) is number &&
+             data.get('totalPrice', 0) is number;
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || (resource.data.email == request.auth.token.email && resource.data.isPending == true));
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated();
+      allow create: if isPPK() && isValidProject(request.resource.data);
+      allow update: if isPPK() && isValidProject(request.resource.data);
+      allow delete: if isPPK();
+
+      match /photos/{photoId} {
+        allow read: if isAuthenticated();
+        allow write: if isPengawas();
+      }
+
+      match /weekly_reports/{reportId} {
+        allow read: if isAuthenticated();
+        allow write: if isPengawas();
+      }
+
+      match /rab/{rabId} {
+        allow read: if isAuthenticated();
+        allow create, update: if (isPengawas() || isAdmin() || isPPK() || isUser()) && isValidRABItem(request.resource.data);
+        allow delete: if isPengawas() || isAdmin() || isPPK() || isUser();
+      }
+    }
+
+    match /providers/{providerId} {
+      allow read: if isAuthenticated();
+      allow create: if isPPK() && isValidProvider(request.resource.data);
+      allow update: if isPPK() && isValidProvider(request.resource.data);
+      allow delete: if isPPK();
+    }
+
+    match /evaluations/{evaluationId} {
+      allow read: if isAuthenticated();
+      allow create: if isPPK() && isValidEvaluation(request.resource.data);
+      allow update: if isPPK() && isValidEvaluation(request.resource.data);
+      allow delete: if isPPK();
+    }
+
+    match /ahsps/{ahspId} {
+      allow read: if isAuthenticated();
+      allow create: if isPPK() && isValidAHSP(request.resource.data);
+      allow update: if isPPK() && isValidAHSP(request.resource.data);
+      allow delete: if isPPK();
+    }
+
+    match /labor_masters/{laborId} {
+      allow read: if isAuthenticated();
+      allow create: if isPPK() && isValidLaborMaster(request.resource.data);
+      allow update: if isPPK();
+      allow delete: if isPPK();
+    }
+
+    match /material_masters/{materialId} {
+      allow read: if isAuthenticated();
+      allow create: if isPPK() && isValidMaterialMaster(request.resource.data);
+      allow update: if isPPK();
+      allow delete: if isPPK();
+    }
+
+    match /equipment_masters/{equipmentId} {
+      allow read: if isAuthenticated();
+      allow create: if isPPK() && isValidEquipmentMaster(request.resource.data);
+      allow update: if isPPK();
+      allow delete: if isPPK();
+    }
+  }
+}
