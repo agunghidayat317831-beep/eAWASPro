@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { getProjects } from '../services/firestore';
-import { Project } from '../types';
+import { Project, UserProfile } from '../types';
 import { MapPin, Building2, TrendingUp, Info } from 'lucide-react';
 
 // Fix for default marker icons in Leaflet with React
@@ -50,14 +50,28 @@ const getMarkerIcon = (progress: number) => {
   });
 };
 
-export default function ProjectMap() {
+export default function ProjectMap({ user }: { user: UserProfile }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   useEffect(() => {
-    const unsubscribe = getProjects(setProjects);
+    const unsubscribe = getProjects((data) => {
+      if (user?.role === 'pengawas') {
+        const currentSupervisorName = user.name || user.username || user.email;
+        const filtered = data.filter(p => {
+          if (!p.supervisorName) return false;
+          return p.supervisorName === currentSupervisorName ||
+                 p.supervisorName === user.name ||
+                 p.supervisorName === user.username ||
+                 p.supervisorName === user.email;
+        });
+        setProjects(filtered);
+      } else {
+        setProjects(data);
+      }
+    });
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const center = { lat: -6.2088, lng: 106.8456 }; // Jakarta default
 

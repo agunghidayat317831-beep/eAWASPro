@@ -20,7 +20,7 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { getProjects } from '../services/firestore';
-import { Project } from '../types';
+import { Project, UserProfile } from '../types';
 
 const StatCard = ({ title, value, icon: Icon, color, subValue }: any) => (
   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -37,13 +37,27 @@ const StatCard = ({ title, value, icon: Icon, color, subValue }: any) => (
   </div>
 );
 
-export default function Dashboard() {
+export default function Dashboard({ user }: { user: UserProfile }) {
   const [projects, setProjects] = useState<Project[]>([]);
 
   useEffect(() => {
-    const unsubscribe = getProjects(setProjects);
+    const unsubscribe = getProjects((data) => {
+      if (user?.role === 'pengawas') {
+        const currentSupervisorName = user.name || user.username || user.email;
+        const filtered = data.filter(p => {
+          if (!p.supervisorName) return false;
+          return p.supervisorName === currentSupervisorName ||
+                 p.supervisorName === user.name ||
+                 p.supervisorName === user.username ||
+                 p.supervisorName === user.email;
+        });
+        setProjects(filtered);
+      } else {
+        setProjects(data);
+      }
+    });
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   const totalProjects = projects.length;
   const completedProjects = projects.filter(p => p.progress === 100).length;

@@ -19,6 +19,7 @@ export interface Project {
   providerId?: string;
   anggaran: number;
   progress: number;
+  supervisorName?: string;
   lat: number;
   lng: number;
   createdAt: any;

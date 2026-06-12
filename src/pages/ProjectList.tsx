@@ -16,7 +16,8 @@ import {
   Star,
   ClipboardCheck,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -27,7 +28,8 @@ import {
   getProviders,
   addProjectEvaluation,
   updateProjectEvaluation,
-  getProjectEvaluation
+  getProjectEvaluation,
+  getUsers
 } from '../services/firestore';
 import { Project, UserProfile, Provider, ProjectEvaluation } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -36,6 +38,7 @@ export default function ProjectList({ user }: { user: UserProfile }) {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [supervisors, setSupervisors] = useState<UserProfile[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export default function ProjectList({ user }: { user: UserProfile }) {
     providerId: '',
     anggaran: 0,
     progress: 0,
+    supervisorName: '',
     lat: -6.2088,
     lng: 106.8456
   });
@@ -71,11 +75,31 @@ export default function ProjectList({ user }: { user: UserProfile }) {
   const [isSubmittingEvaluation, setIsSubmittingEvaluation] = useState(false);
 
   useEffect(() => {
-    const unsubscribeProjects = getProjects(setProjects);
+    const unsubscribeProjects = getProjects((data) => {
+      if (user?.role === 'pengawas') {
+        const currentSupervisorName = user.name || user.username || user.email;
+        const filtered = data.filter(p => {
+          if (!p.supervisorName) return false;
+          return p.supervisorName === currentSupervisorName ||
+                 p.supervisorName === user.name ||
+                 p.supervisorName === user.username ||
+                 p.supervisorName === user.email;
+        });
+        setProjects(filtered);
+      } else {
+        setProjects(data);
+      }
+    });
     const unsubscribeProviders = getProviders(setProviders);
+    const unsubscribeUsers = getUsers((uList) => {
+      // Filter users where role is 'pengawas'
+      const onlyPengawas = uList.filter(u => u.role === 'pengawas');
+      setSupervisors(onlyPengawas);
+    });
     return () => {
       unsubscribeProjects();
       unsubscribeProviders();
+      unsubscribeUsers();
     };
   }, []);
 
@@ -109,6 +133,7 @@ export default function ProjectList({ user }: { user: UserProfile }) {
       providerId: '', 
       anggaran: 0, 
       progress: 0, 
+      supervisorName: '',
       lat: -6.2088, 
       lng: 106.8456 
     });
@@ -127,6 +152,7 @@ export default function ProjectList({ user }: { user: UserProfile }) {
       providerId: project.providerId || '',
       anggaran: project.anggaran,
       progress: project.progress,
+      supervisorName: project.supervisorName || '',
       lat: project.lat,
       lng: project.lng
     });
@@ -343,6 +369,12 @@ export default function ProjectList({ user }: { user: UserProfile }) {
                             {project.executionPeriod} Hari
                           </span>
                         )}
+                      </div>
+                    )}
+                    {project.supervisorName && (
+                      <div className="flex items-center gap-1 text-slate-500 text-xs mt-2 font-semibold">
+                        <User size={12} className="text-slate-400" />
+                        <span>Pengawas: {project.supervisorName}</span>
                       </div>
                     )}
                   </div>
@@ -742,19 +774,23 @@ export default function ProjectList({ user }: { user: UserProfile }) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">Progress (%)</label>
-                  <input 
+                  <label className="text-sm font-bold text-slate-700">Pilih Pengawas</label>
+                  <select 
                     required
-                    type="number" 
-                    min="0"
-                    max="100"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
-                    value={isNaN(formData.progress) ? '' : formData.progress}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      setFormData({...formData, progress: isNaN(val) ? 0 : val});
-                    }}
-                  />
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
+                    value={formData.supervisorName}
+                    onChange={(e) => setFormData({...formData, supervisorName: e.target.value})}
+                  >
+                    <option value="">Pilih Pengawas</option>
+                    {supervisors.map(p => {
+                      const name = p.name || p.username || p.email;
+                      return (
+                        <option key={p.uid} value={name}>
+                          {name}
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-700">Latitude</label>

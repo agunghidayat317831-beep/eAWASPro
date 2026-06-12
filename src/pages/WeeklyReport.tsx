@@ -67,18 +67,29 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
 
   useEffect(() => {
     const unsubscribeProjects = getProjects((data) => {
-      setProjects(data);
+      let filteredData = data;
+      if (user?.role === 'pengawas') {
+        const currentSupervisorName = user.name || user.username || user.email;
+        filteredData = data.filter(p => {
+          if (!p.supervisorName) return false;
+          return p.supervisorName === currentSupervisorName ||
+                 p.supervisorName === user.name ||
+                 p.supervisorName === user.username ||
+                 p.supervisorName === user.email;
+        });
+      }
+      setProjects(filteredData);
       
-      if (!initialSelectionDone.current && data.length > 0) {
+      if (!initialSelectionDone.current && filteredData.length > 0) {
         const stateProjectId = location.state?.projectId;
         if (stateProjectId) {
-          const found = data.find(p => p.id === stateProjectId);
+          const found = filteredData.find(p => p.id === stateProjectId);
           if (found) {
             setSelectedProject(found);
             initialSelectionDone.current = true;
           }
         } else {
-          setSelectedProject(data[0]);
+          setSelectedProject(filteredData[0]);
           initialSelectionDone.current = true;
         }
       }

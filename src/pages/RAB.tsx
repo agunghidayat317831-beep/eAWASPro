@@ -408,11 +408,23 @@ export default function RAB({ user }: RABPageProps) {
 
   useEffect(() => {
     const unsubProjects = getProjects((pList) => {
-      setProjects(pList);
+      let filteredData = pList;
+      if (user?.role === 'pengawas') {
+        const currentSupervisorName = user.name || user.username || user.email;
+        filteredData = pList.filter(p => {
+          if (!p.supervisorName) return false;
+          return p.supervisorName === currentSupervisorName ||
+                 p.supervisorName === user.name ||
+                 p.supervisorName === user.username ||
+                 p.supervisorName === user.email;
+        });
+      }
+      setProjects(filteredData);
+      
       // Check for project from route state
       const state = location.state as { projectId?: string };
       if (state?.projectId) {
-        const project = pList.find(p => p.id === state.projectId);
+        const project = filteredData.find(p => p.id === state.projectId);
         if (project) {
           setSelectedProject(project);
         }
@@ -423,7 +435,7 @@ export default function RAB({ user }: RABPageProps) {
       unsubProjects();
       unsubAHSPs();
     };
-  }, [location.state]);
+  }, [location.state, user]);
 
   useEffect(() => {
     if (selectedProject) {

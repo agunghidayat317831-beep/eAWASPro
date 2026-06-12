@@ -12,12 +12,8 @@ import {
   ComposedChart,
   Scatter
 } from 'recharts';
-import { 
-  getProjects, 
-  getWeeklyReports,
-  getProviders
-} from '../services/firestore';
-import { Project, WeeklyReport, Provider } from '../types';
+import { getProjects, getWeeklyReports, getProviders } from '../services/firestore';
+import { Project, WeeklyReport, Provider, UserProfile } from '../types';
 import { 
   TrendingUp, 
   Calendar, 
@@ -30,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const SCurve: React.FC = () => {
+const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -42,9 +38,21 @@ const SCurve: React.FC = () => {
 
   useEffect(() => {
     const unsubscribeProjects = getProjects((data) => {
-      setProjects(data);
-      if (!initialSelectionDone.current && data.length > 0) {
-        setSelectedProject(data[0]);
+      let filteredData = data;
+      if (user?.role === 'pengawas') {
+        const currentSupervisorName = user.name || user.username || user.email;
+        filteredData = data.filter(p => {
+          if (!p.supervisorName) return false;
+          return p.supervisorName === currentSupervisorName ||
+                 p.supervisorName === user.name ||
+                 p.supervisorName === user.username ||
+                 p.supervisorName === user.email;
+        });
+      }
+      setProjects(filteredData);
+      
+      if (!initialSelectionDone.current && filteredData.length > 0) {
+        setSelectedProject(filteredData[0]);
         initialSelectionDone.current = true;
       }
       setLoading(false);

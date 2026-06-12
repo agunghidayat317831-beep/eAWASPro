@@ -57,13 +57,26 @@ export default function ProviderList({ user }: ProviderListProps) {
       setLoading(false);
     });
     const unsubscribeEvaluations = getProjectEvaluations(setEvaluations);
-    const unsubscribeProjects = getProjects(setProjects);
+    const unsubscribeProjects = getProjects((data) => {
+      let filteredData = data;
+      if (user?.role === 'pengawas') {
+        const currentSupervisorName = user.name || user.username || user.email;
+        filteredData = data.filter(p => {
+          if (!p.supervisorName) return false;
+          return p.supervisorName === currentSupervisorName ||
+                 p.supervisorName === user.name ||
+                 p.supervisorName === user.username ||
+                 p.supervisorName === user.email;
+        });
+      }
+      setProjects(filteredData);
+    });
     return () => {
       unsubscribeProviders();
       unsubscribeEvaluations();
       unsubscribeProjects();
     };
-  }, []);
+  }, [user]);
 
   const getProviderAverage = (providerId: string) => {
     const providerEvaluations = evaluations.filter(e => e.providerId === providerId);

@@ -31,9 +31,22 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
   });
 
   useEffect(() => {
-    const unsubscribe = getProjects(setProjects);
+    const unsubscribe = getProjects((data) => {
+      let filteredData = data;
+      if (user?.role === 'pengawas') {
+        const currentSupervisorName = user.name || user.username || user.email;
+        filteredData = data.filter(p => {
+          if (!p.supervisorName) return false;
+          return p.supervisorName === currentSupervisorName ||
+                 p.supervisorName === user.name ||
+                 p.supervisorName === user.username ||
+                 p.supervisorName === user.email;
+        });
+      }
+      setProjects(filteredData);
+    });
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (selectedProjectId) {

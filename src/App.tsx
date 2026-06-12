@@ -234,13 +234,13 @@ export default function App() {
             <Sidebar user={user} onLogout={handleLogout} />
             <main className="flex-1 lg:ml-64 p-4 lg:p-8">
               <Routes>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/" element={<Dashboard user={user} />} />
                 <Route path="/proyek" element={<ProjectList user={user} />} />
                 <Route path="/penyedia" element={<ProviderList user={user} />} />
                 <Route path="/foto" element={<PhotoGallery user={user} />} />
                 <Route path="/laporan" element={<WeeklyReport user={user} />} />
-                <Route path="/kurva-s" element={<SCurve />} />
-                <Route path="/peta" element={<ProjectMap />} />
+                <Route path="/kurva-s" element={<SCurve user={user} />} />
+                <Route path="/peta" element={<ProjectMap user={user} />} />
                 <Route path="/ahsp" element={<AHSP user={user} />} />
                 <Route path="/rab" element={<RAB user={user} />} />
                 <Route path="/ahsp/upah" element={<PriceList user={user} />} />
