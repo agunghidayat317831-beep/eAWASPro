@@ -12,7 +12,7 @@ import {
   ComposedChart,
   Scatter
 } from 'recharts';
-import { getProjects, getWeeklyReports, getProviders } from '../services/firestore';
+import { getProjects, getWeeklyReports, getProviders, getUsers } from '../services/firestore';
 import { Project, WeeklyReport, Provider, UserProfile } from '../types';
 import { 
   TrendingUp, 
@@ -22,7 +22,11 @@ import {
   ChevronRight,
   ArrowLeft,
   Mail,
-  MessageCircle
+  MessageCircle,
+  FileText,
+  X,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,6 +37,20 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [reports, setReports] = useState<WeeklyReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ppkList, setPpkList] = useState<UserProfile[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  const [isWarningModalOpen, setIsWarningModalOpen] = useState(false);
+  const [warningConfig, setWarningConfig] = useState({
+    level: 'PERTAMA', // 'PERTAMA', 'KEDUA', 'KETIGA'
+    scmLevel: 'I', // 'I', 'II', 'III'
+    nomor: '',
+    lampiran: '-',
+    weekNum: 1,
+    deviasi: '0',
+    date: new Date().toISOString().split('T')[0],
+    ppkName: ''
+  });
 
   const initialSelectionDone = React.useRef(false);
 
@@ -60,9 +78,15 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
 
     const unsubscribeProviders = getProviders(setProviders);
 
+    const unsubscribeUsers = getUsers((uList) => {
+      const onlyPpk = uList.filter(u => u.role === 'ppk');
+      setPpkList(onlyPpk);
+    });
+
     return () => {
       unsubscribeProjects();
       unsubscribeProviders();
+      unsubscribeUsers();
     };
   }, []);
 
@@ -115,52 +139,135 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
   const lastPlanned = chartData[currentWeekIdx]?.rencana || 0;
   const deviation = (lastActual - lastPlanned).toFixed(2);
 
-  const handleSendEmail = (weekNum: number, dev: string) => {
+  const formatIndoDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    
+    const day = date.getDate();
+    const months = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  };
+
+  const handleLevelChange = (level: string) => {
+    let scmLevel = 'I';
+    if (level === 'KEDUA') scmLevel = 'II';
+    if (level === 'KETIGA') scmLevel = 'III';
+    
+    setWarningConfig(prev => ({
+      ...prev,
+      level,
+      scmLevel,
+      nomor: prev.nomor.includes('/SP-') 
+        ? prev.nomor.replace(/\/SP-(I|II|III)\//, `/SP-${scmLevel}/`)
+        : `.../SP-${scmLevel}/PPK/${new Date().getFullYear()}`
+    }));
+  };
+
+  const openWarningModal = (weekNum: number, dev: string) => {
     if (!selectedProject) return;
     
+    const devNum = Number(dev);
+    let autoLevel = 'PERTAMA';
+    let autoScm = 'I';
+    
+    // Auto-detect warning level based on typical critical contracts path (e.g. deviation <= -5 is normal alert, <= -10 is level II, <= -15 is level III)
+    if (devNum <= -15) {
+      autoLevel = 'KETIGA';
+      autoScm = 'III';
+    } else if (devNum <= -10) {
+      autoLevel = 'KEDUA';
+      autoScm = 'II';
+    } else {
+      autoLevel = 'PERTAMA';
+      autoScm = 'I';
+    }
+
+    const defaultPpk = ppkList.length > 0 ? (ppkList[0].name || ppkList[0].username || '') : '';
+
+    setWarningConfig({
+      level: autoLevel,
+      scmLevel: autoScm,
+      nomor: `.../SP-${autoScm}/PPK/${new Date().getFullYear()}`,
+      lampiran: '-',
+      weekNum,
+      deviasi: dev,
+      date: new Date().toISOString().split('T')[0],
+      ppkName: defaultPpk
+    });
+    
+    setIsWarningModalOpen(true);
+  };
+
+  const generateWarningLetterText = () => {
+    if (!selectedProject) return '';
+    const provider = providers.find(p => p.name === selectedProject.ptCv);
+    const dateFormatted = formatIndoDate(warningConfig.date);
+    
+    const spLevelWord = warningConfig.level === 'PERTAMA' ? 'Pertama' : 
+                        warningConfig.level === 'KEDUA' ? 'Kedua' : 'Ketiga';
+
+    return `SURAT PERINGATAN ${warningConfig.level}
+
+Nomor: ${warningConfig.nomor}
+Lampiran: ${warningConfig.lampiran}
+
+Yth. Direktur ${selectedProject.ptCv}
+di
+    ${provider?.address || '[Alamat CV/PT]'}
+
+Dengan hormat,
+Berdasarkan catatan kemajuan pekerjaan yang Saudara/i laksanakan pada paket pekerjaan ${selectedProject.name} hingga periode Minggu ke-${warningConfig.weekNum} terdapat deviasi ${warningConfig.deviasi}% Sesuai Syarat-Sarat Umum Kontrak Bagian B.6 Pasal 43.1, 43.2 dan 43.3, maka pekerjaan Saudara Kami nyatakan sebagai Kontrak Kritis.
+Dengan demikian kami kirimkan surat ini sebagai Surat Peringatan ${spLevelWord} atas keterlambatan pekerjaan yang menjadi tanggung jawab Saudara.
+Selanjutnya, agar Saudara dapat mempersiapkan Program Percepatan/Action Plan (segala kebutuhan guna peningkatan pencapaian kemajuan pelaksanaan) yang akan dibahas pada Rapat Pembuktian (Show Cause Meeting/SCM) Tingkat ${warningConfig.scmLevel}.
+Demikian agar menjadi perhatiannya.
+
+Karawang, ${dateFormatted || '[Tanggal Bulan Tahun]'}
+KPA selaku Pejabat Pembuat Komitmen
+
+
+${warningConfig.ppkName || '[Nama PPK]'}`;
+  };
+
+  const triggerSendEmail = () => {
+    if (!selectedProject) return;
     const provider = providers.find(p => p.name === selectedProject.ptCv);
     if (!provider || !provider.email) {
       alert(`Email penyedia ${selectedProject.ptCv} tidak ditemukan. Silakan lengkapi data penyedia di menu Penyedia.`);
       return;
     }
 
-    const subject = encodeURIComponent(`Surat Peringatan - ${selectedProject.name} (Minggu ${weekNum})`);
-    const body = encodeURIComponent(
-      `Yth. Pimpinan ${selectedProject.ptCv},\n\n` +
-      `Berdasarkan laporan mingguan proyek "${selectedProject.name}" pada Minggu ke-${weekNum}, ` +
-      `ditemukan deviasi progres sebesar ${dev}% (Terlambat).\n\n` +
-      `Mohon segera dilakukan percepatan pekerjaan agar proyek dapat selesai sesuai jadwal.\n\n` +
-      `Terima kasih.`
-    );
+    const letterText = generateWarningLetterText();
+    const subject = encodeURIComponent(`Surat Peringatan ${warningConfig.level} - ${selectedProject.name} (Minggu ${warningConfig.weekNum})`);
+    const body = encodeURIComponent(letterText);
 
     window.location.href = `mailto:${provider.email}?subject=${subject}&body=${body}`;
   };
 
-  const handleSendWhatsApp = (weekNum: number, dev: string) => {
+  const triggerSendWhatsApp = () => {
     if (!selectedProject) return;
-    
     const provider = providers.find(p => p.name === selectedProject.ptCv);
     if (!provider || !provider.phone) {
       alert(`Nomor WhatsApp penyedia ${selectedProject.ptCv} tidak ditemukan. Silakan lengkapi data penyedia di menu Penyedia.`);
       return;
     }
 
-    // Format phone number: remove non-numeric, replace leading 0 with 62
     let phone = provider.phone.replace(/\D/g, '');
     if (phone.startsWith('0')) {
       phone = '62' + phone.substring(1);
     }
 
-    const message = encodeURIComponent(
-      `*SURAT PERINGATAN*\n\n` +
-      `Yth. Pimpinan *${selectedProject.ptCv}*,\n\n` +
-      `Berdasarkan laporan mingguan proyek *${selectedProject.name}* pada Minggu ke-${weekNum}, ` +
-      `ditemukan deviasi progres sebesar *${dev}%* (Terlambat).\n\n` +
-      `Mohon segera dilakukan percepatan pekerjaan agar proyek dapat selesai sesuai jadwal.\n\n` +
-      `Terima kasih.`
-    );
+    const letterText = generateWarningLetterText();
+    const message = encodeURIComponent(letterText);
 
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+  };
+
+  const handleSendWarning = (weekNum: number, dev: string) => {
+    openWarningModal(weekNum, dev);
   };
 
   return (
@@ -338,24 +445,14 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
                       <td className="px-6 py-4">
                         {data.realisasi && data.rencana ? (
                           Number(data.deviasi) <= -5 ? (
-                            <div className="flex flex-col gap-1 items-center">
-                              <button 
-                                onClick={() => handleSendEmail(idx + 1, data.deviasi || '0')}
-                                className="w-full flex items-center justify-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200 hover:bg-red-200 transition-colors"
-                                title="Kirim Email Peringatan"
-                              >
-                                <Mail size={10} />
-                                Email SP
-                              </button>
-                              <button 
-                                onClick={() => handleSendWhatsApp(idx + 1, data.deviasi || '0')}
-                                className="w-full flex items-center justify-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200 transition-colors"
-                                title="Kirim WA Peringatan"
-                              >
-                                <MessageCircle size={10} />
-                                WA SP
-                              </button>
-                            </div>
+                            <button 
+                              onClick={() => handleSendWarning(idx + 1, data.deviasi || '0')}
+                              className="w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors shadow-sm cursor-pointer"
+                              title="Kirim Surat Peringatan Resmi"
+                            >
+                              <FileText size={12} className="text-red-600" />
+                              Surat Peringatan
+                            </button>
                           ) : (
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                               Number(data.deviasi) >= 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
@@ -370,6 +467,211 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Warning Modal */}
+      {isWarningModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-[80vh]">
+            
+            {/* Left Side: Editor Form */}
+            <div className="md:w-1/2 p-6 overflow-y-auto flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-200 bg-white">
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <FileText className="text-red-500" size={24} />
+                    <h3 className="text-lg font-bold text-slate-900 font-sans">Format Surat Peringatan</h3>
+                  </div>
+                  <button 
+                    onClick={() => setIsWarningModalOpen(false)}
+                    className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-4 font-sans">
+                  {/* SP Level Selector */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Tingkat SP</label>
+                      <select
+                        value={warningConfig.level}
+                        onChange={(e) => handleLevelChange(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                      >
+                        <option value="PERTAMA">PERTAMA (I)</option>
+                        <option value="KEDUA">KEDUA (II)</option>
+                        <option value="KETIGA">KETIGA (III)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Tingkat SCM</label>
+                      <select
+                        value={warningConfig.scmLevel}
+                        onChange={(e) => setWarningConfig(prev => ({ ...prev, scmLevel: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                      >
+                        <option value="I">I</option>
+                        <option value="II">II</option>
+                        <option value="III">III</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Nomor & Lampiran */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Nomor Surat</label>
+                      <input
+                        type="text"
+                        value={warningConfig.nomor}
+                        onChange={(e) => setWarningConfig(prev => ({ ...prev, nomor: e.target.value }))}
+                        placeholder="Nomor Surat"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Lampiran</label>
+                      <input
+                        type="text"
+                        value={warningConfig.lampiran}
+                        onChange={(e) => setWarningConfig(prev => ({ ...prev, lampiran: e.target.value }))}
+                        placeholder="Lampiran"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Periode & Deviasi */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Minggu Ke-</label>
+                      <input
+                        type="number"
+                        value={warningConfig.weekNum}
+                        onChange={(e) => setWarningConfig(prev => ({ ...prev, weekNum: parseInt(e.target.value) || 1 }))}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Nilai Deviasi (%)</label>
+                      <input
+                        type="text"
+                        value={warningConfig.deviasi}
+                        onChange={(e) => setWarningConfig(prev => ({ ...prev, deviasi: e.target.value }))}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Tanggal Surat */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Tanggal Surat</label>
+                    <input
+                      type="date"
+                      value={warningConfig.date}
+                      onChange={(e) => setWarningConfig(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Pejabat Pembuat Komitmen (PPK) Selection */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Nama Pejabat Pembuat Komitmen (PPK)</label>
+                    {ppkList.length > 0 && (
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            setWarningConfig(prev => ({ ...prev, ppkName: e.target.value }));
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none mb-2"
+                      >
+                        <option value="">-- Pilih PPK terdaftar --</option>
+                        {ppkList.map(p => {
+                          const value = p.name || p.username || p.email;
+                          return (
+                            <option key={p.uid} value={value}>{value}</option>
+                          );
+                        })}
+                      </select>
+                    )}
+                    <input
+                      type="text"
+                      value={warningConfig.ppkName}
+                      onChange={(e) => setWarningConfig(prev => ({ ...prev, ppkName: e.target.value }))}
+                      placeholder="Ketik Nama PPK"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons Panel */}
+              <div className="flex flex-col gap-2 pt-6 border-t border-slate-200 mt-6 font-sans">
+                <div className="flex gap-2">
+                  <button
+                    onClick={triggerSendEmail}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer"
+                  >
+                    <Mail size={16} />
+                    Kirim via Email
+                  </button>
+                  <button
+                    onClick={triggerSendWhatsApp}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-colors shadow-sm cursor-pointer"
+                  >
+                    <MessageCircle size={16} />
+                    Kirim via WA
+                  </button>
+                </div>
+                <button
+                  onClick={() => setIsWarningModalOpen(false)}
+                  className="w-full px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-500 font-semibold text-sm rounded-xl transition-colors cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+
+            {/* Right Side: Virtual Letter Paper Preview */}
+            <div className="md:w-1/2 p-6 bg-slate-100 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider font-sans">Pratinjau Surat Resmi</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(generateWarningLetterText());
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 transition-all shadow-sm cursor-pointer"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={14} className="text-green-500" />
+                      <span>Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={14} />
+                      <span>Salin Surat</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Letter sheet */}
+              <div className="bg-white p-6 rounded-lg shadow-md border border-slate-300 flex-1 overflow-y-auto max-h-[50vh] md:max-h-[60vh] font-serif text-xs text-slate-800 leading-relaxed whitespace-pre-wrap select-all focus:outline-none">
+                {generateWarningLetterText()}
+              </div>
+            </div>
+            
           </div>
         </div>
       )}
