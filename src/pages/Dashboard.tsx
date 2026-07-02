@@ -17,10 +17,12 @@ import {
   CheckCircle2, 
   Clock, 
   TrendingUp,
-  ArrowUpRight
+  ArrowUpRight,
+  Building2,
+  AlertTriangle
 } from 'lucide-react';
-import { getProjects } from '../services/firestore';
-import { Project, UserProfile } from '../types';
+import { getProjects, getProviders } from '../services/firestore';
+import { Project, UserProfile, Provider } from '../types';
 
 const StatCard = ({ title, value, icon: Icon, color, subValue }: any) => (
   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
@@ -39,9 +41,12 @@ const StatCard = ({ title, value, icon: Icon, color, subValue }: any) => (
 
 export default function Dashboard({ user }: { user: UserProfile }) {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
 
   useEffect(() => {
-    const unsubscribe = getProjects((data) => {
+    const unsubscribeProjects = getProjects((data) => {
+      setAllProjects(data);
       if (user?.role === 'pengawas') {
         const currentSupervisorName = user.name || user.username || user.email;
         const filtered = data.filter(p => {
@@ -56,7 +61,15 @@ export default function Dashboard({ user }: { user: UserProfile }) {
         setProjects(data);
       }
     });
-    return () => unsubscribe();
+
+    const unsubscribeProviders = getProviders((data) => {
+      setProviders(data);
+    });
+
+    return () => {
+      unsubscribeProjects();
+      unsubscribeProviders();
+    };
   }, [user]);
 
   const totalProjects = projects.length;
@@ -65,6 +78,23 @@ export default function Dashboard({ user }: { user: UserProfile }) {
   const averageProgress = totalProjects > 0 
     ? Math.round(projects.reduce((acc, p) => acc + p.progress, 0) / totalProjects) 
     : 0;
+
+  // Statistik Penyedia & SKP
+  const totalProviders = providers.length;
+  const providerSKPList = providers.map(p => {
+    const ongoingCount = allProjects.filter(project => 
+      (project.providerId === p.id || (project.ptCv && project.ptCv === p.name)) && 
+      project.progress < 100
+    ).length;
+    const score = 5 - ongoingCount;
+    return {
+      providerId: p.id,
+      skp: score < 0 ? 0 : score
+    };
+  });
+
+  const providersWithSKPZero = providerSKPList.filter(item => item.skp === 0).length;
+  const providersWithSKPGreaterThanZero = providerSKPList.filter(item => item.skp > 0).length;
 
   const chartData = projects.slice(0, 10).map(p => ({
     name: p.name.length > 15 ? p.name.substring(0, 15) + '...' : p.name,
@@ -84,32 +114,69 @@ export default function Dashboard({ user }: { user: UserProfile }) {
         <p className="text-slate-500">Ringkasan status proyek pemerintah saat ini.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title="Total Proyek" 
-          value={totalProjects} 
-          icon={Briefcase} 
-          color="bg-slate-800" 
-        />
-        <StatCard 
-          title="Proyek Selesai" 
-          value={completedProjects} 
-          icon={CheckCircle2} 
-          color="bg-emerald-500" 
-          subValue={`${Math.round((completedProjects/totalProjects)*100 || 0)}% dari total`}
-        />
-        <StatCard 
-          title="Proyek Berjalan" 
-          value={ongoingProjects} 
-          icon={Clock} 
-          color="bg-amber-500" 
-        />
-        <StatCard 
-          title="Progress Rata-rata" 
-          value={`${averageProgress}%`} 
-          icon={TrendingUp} 
-          color="bg-indigo-500" 
-        />
+      {/* Proyek Section */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <Briefcase size={20} className="text-slate-700" />
+          Statistik Proyek
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard 
+            title="Total Proyek" 
+            value={totalProjects} 
+            icon={Briefcase} 
+            color="bg-slate-800" 
+          />
+          <StatCard 
+            title="Proyek Selesai" 
+            value={completedProjects} 
+            icon={CheckCircle2} 
+            color="bg-emerald-500" 
+            subValue={`${Math.round((completedProjects/totalProjects)*100 || 0)}% dari total`}
+          />
+          <StatCard 
+            title="Proyek Berjalan" 
+            value={ongoingProjects} 
+            icon={Clock} 
+            color="bg-amber-500" 
+          />
+          <StatCard 
+            title="Progress Rata-rata" 
+            value={`${averageProgress}%`} 
+            icon={TrendingUp} 
+            color="bg-indigo-500" 
+          />
+        </div>
+      </div>
+
+      {/* Penyedia Section */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <Building2 size={20} className="text-slate-700" />
+          Statistik Penyedia Terdaftar
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard 
+            title="Total Penyedia" 
+            value={totalProviders} 
+            icon={Building2} 
+            color="bg-slate-700" 
+          />
+          <StatCard 
+            title="Penyedia SKP = 0" 
+            value={providersWithSKPZero} 
+            icon={AlertTriangle} 
+            color="bg-rose-500" 
+            subValue="Kapasitas pengerjaan proyek penuh"
+          />
+          <StatCard 
+            title="Penyedia SKP > 0" 
+            value={providersWithSKPGreaterThanZero} 
+            icon={CheckCircle2} 
+            color="bg-teal-500" 
+            subValue="Tersedia kapasitas pengerjaan proyek baru"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
