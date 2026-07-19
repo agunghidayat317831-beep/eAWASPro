@@ -15,7 +15,8 @@ import {
   ChevronUp,
   ClipboardCheck,
   ListFilter,
-  ArrowUpDown
+  ArrowUpDown,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Provider, UserProfile, ProjectEvaluation, Project } from '../types';
@@ -48,6 +49,8 @@ export default function ProviderList({ user }: ProviderListProps) {
     email: '',
     phone: ''
   });
+
+  const [bypassDuplicate, setBypassDuplicate] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -99,7 +102,51 @@ export default function ProviderList({ user }: ProviderListProps) {
     };
   };
 
+  const checkDuplicates = () => {
+    const duplicates: { name?: boolean; npwp?: boolean; email?: boolean; phone?: boolean } = {};
+    
+    const norm = (s: string) => s.trim().toLowerCase().replace(/[\s\-\.]/g, '');
+    const normPhone = (s: string) => {
+      let num = s.trim().replace(/\D/g, '');
+      if (num.startsWith('0')) {
+        num = '62' + num.substring(1);
+      } else if (num.startsWith('62')) {
+        // already starts with 62
+      } else if (num) {
+        num = '62' + num;
+      }
+      return num;
+    };
+
+    const currentName = norm(formData.name);
+    const currentNpwp = norm(formData.npwp);
+    const currentEmail = norm(formData.email);
+    const currentPhone = normPhone(formData.phone);
+
+    if (!currentName && !currentNpwp && !currentEmail && !currentPhone) return duplicates;
+
+    providers.forEach(p => {
+      if (editingProvider && p.id === editingProvider.id) return;
+
+      if (currentName && norm(p.name) === currentName) {
+        duplicates.name = true;
+      }
+      if (currentNpwp && norm(p.npwp) === currentNpwp) {
+        duplicates.npwp = true;
+      }
+      if (currentEmail && p.email && norm(p.email) === currentEmail) {
+        duplicates.email = true;
+      }
+      if (currentPhone && p.phone && normPhone(p.phone) === currentPhone) {
+        duplicates.phone = true;
+      }
+    });
+
+    return duplicates;
+  };
+
   const handleOpenModal = (provider?: Provider) => {
+    setBypassDuplicate(false);
     if (provider) {
       setEditingProvider(provider);
       setFormData({
@@ -124,6 +171,14 @@ export default function ProviderList({ user }: ProviderListProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const duplicates = checkDuplicates();
+    const hasDuplicates = Object.keys(duplicates).length > 0;
+    
+    if (hasDuplicates && !bypassDuplicate) {
+      return; // Intercept if bypass checkbox not checked
+    }
+
     setSubmitting(true);
     
     try {
@@ -178,6 +233,8 @@ export default function ProviderList({ user }: ProviderListProps) {
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
     });
+
+  const duplicateCheck = checkDuplicates();
 
   return (
     <div className="space-y-8">
@@ -447,10 +504,20 @@ export default function ProviderList({ user }: ProviderListProps) {
                       required
                       type="text"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all font-medium"
+                      onChange={(e) => {
+                        setFormData({ ...formData, name: e.target.value });
+                        setBypassDuplicate(false); // Reset confirmation on change
+                      }}
+                      className={`w-full px-5 py-4 bg-slate-50 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all font-medium ${
+                        duplicateCheck.name ? 'border border-amber-300 ring-2 ring-amber-100 focus:ring-amber-500' : 'border-none'
+                      }`}
                       placeholder="Masukkan nama perusahaan..."
                     />
+                    {duplicateCheck.name && (
+                      <p className="text-xs text-amber-600 font-bold flex items-center gap-1 mt-1.5 ml-1">
+                        <AlertTriangle size={14} /> Nama perusahaan ini sudah terdaftar di sistem
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -471,10 +538,20 @@ export default function ProviderList({ user }: ProviderListProps) {
                       required
                       type="text"
                       value={formData.npwp}
-                      onChange={(e) => setFormData({ ...formData, npwp: e.target.value })}
-                      className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all font-medium"
+                      onChange={(e) => {
+                        setFormData({ ...formData, npwp: e.target.value });
+                        setBypassDuplicate(false); // Reset confirmation on change
+                      }}
+                      className={`w-full px-5 py-4 bg-slate-50 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all font-medium ${
+                        duplicateCheck.npwp ? 'border border-amber-300 ring-2 ring-amber-100 focus:ring-amber-500' : 'border-none'
+                      }`}
                       placeholder="00.000.000.0-000.000"
                     />
+                    {duplicateCheck.npwp && (
+                      <p className="text-xs text-amber-600 font-bold flex items-center gap-1 mt-1.5 ml-1">
+                        <AlertTriangle size={14} /> NPWP ini sudah terdaftar di sistem
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -484,10 +561,20 @@ export default function ProviderList({ user }: ProviderListProps) {
                         required
                         type="email"
                         value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all font-medium"
+                        onChange={(e) => {
+                          setFormData({ ...formData, email: e.target.value });
+                          setBypassDuplicate(false); // Reset confirmation on change
+                        }}
+                        className={`w-full px-5 py-4 bg-slate-50 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all font-medium ${
+                          duplicateCheck.email ? 'border border-amber-300 ring-2 ring-amber-100 focus:ring-amber-500' : 'border-none'
+                        }`}
                         placeholder="email@perusahaan.com"
                       />
+                      {duplicateCheck.email && (
+                        <p className="text-xs text-amber-600 font-bold flex items-center gap-1 mt-1.5 ml-1">
+                          <AlertTriangle size={14} /> Email ini sudah terdaftar
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-bold text-slate-700 ml-1">Nomor Telepon</label>
@@ -495,12 +582,55 @@ export default function ProviderList({ user }: ProviderListProps) {
                         required
                         type="tel"
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full px-5 py-4 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all font-medium"
+                        onChange={(e) => {
+                          setFormData({ ...formData, phone: e.target.value });
+                          setBypassDuplicate(false); // Reset confirmation on change
+                        }}
+                        className={`w-full px-5 py-4 bg-slate-50 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all font-medium ${
+                          duplicateCheck.phone ? 'border border-amber-300 ring-2 ring-amber-100 focus:ring-amber-500' : 'border-none'
+                        }`}
                         placeholder="0812..."
                       />
+                      {duplicateCheck.phone && (
+                        <p className="text-xs text-amber-600 font-bold flex items-center gap-1 mt-1.5 ml-1">
+                          <AlertTriangle size={14} /> Nomor telepon ini sudah terdaftar
+                        </p>
+                      )}
                     </div>
                   </div>
+
+                  {/* Warning Banner & Bypass Checkbox */}
+                  {Object.keys(duplicateCheck).length > 0 && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3">
+                      <div className="flex items-start gap-3 text-amber-800 text-sm font-medium">
+                        <AlertTriangle size={20} className="shrink-0 text-amber-600 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-bold text-amber-900">Peringatan: Data Duplikat Terdeteksi</p>
+                          <p className="text-xs text-amber-700">
+                            Beberapa data yang Anda masukkan sudah terdaftar pada penyedia lain:
+                          </p>
+                          <ul className="list-disc list-inside text-xs mt-1 space-y-0.5 text-amber-700">
+                            {duplicateCheck.name && <li>Nama Perusahaan: <span className="font-bold">{formData.name}</span></li>}
+                            {duplicateCheck.npwp && <li>NPWP: <span className="font-bold">{formData.npwp}</span></li>}
+                            {duplicateCheck.email && <li>Email: <span className="font-bold">{formData.email}</span></li>}
+                            {duplicateCheck.phone && <li>Nomor Telepon: <span className="font-bold">{formData.phone}</span></li>}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <label className="flex items-start gap-2.5 p-3 bg-white border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-50/20 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={bypassDuplicate}
+                          onChange={(e) => setBypassDuplicate(e.target.checked)}
+                          className="mt-1 rounded text-emerald-600 focus:ring-emerald-500 border-amber-300 w-4 h-4"
+                        />
+                        <span className="text-xs text-amber-950 font-semibold select-none leading-tight">
+                          Saya menyatakan data di atas sudah valid & ingin menyimpannya meskipun ada kesamaan data.
+                        </span>
+                      </label>
+                    </div>
+                  )}
 
                   <div className="pt-4 flex gap-3">
                     <button
@@ -512,8 +642,8 @@ export default function ProviderList({ user }: ProviderListProps) {
                     </button>
                     <button
                       type="submit"
-                      disabled={submitting}
-                      className="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      disabled={submitting || (Object.keys(duplicateCheck).length > 0 && !bypassDuplicate)}
+                      className="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {submitting ? (
                         <>
