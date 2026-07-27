@@ -523,29 +523,29 @@ export default function RAB({ user }: RABPageProps) {
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => setSelectedProject(null)}
-            className="p-3 hover:bg-slate-100 rounded-2xl transition-colors"
+            className="p-2 sm:p-3 hover:bg-slate-100 rounded-2xl transition-colors shrink-0"
           >
-            <ArrowLeft size={24} />
+            <ArrowLeft size={20} className="sm:w-6 sm:h-6" />
           </button>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">RAB: {selectedProject.name}</h1>
-            <p className="text-slate-500 font-medium">{selectedProject.contractNumber || 'No. Kontrak belum tersedia'}</p>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight truncate">RAB: {selectedProject.name}</h1>
+            <p className="text-xs sm:text-sm text-slate-500 font-medium truncate">{selectedProject.contractNumber || 'No. Kontrak belum tersedia'}</p>
           </div>
         </div>
         {canEdit && !isFormOpen && (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button 
               onClick={downloadTemplate}
-              className="flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-6 py-4 rounded-3xl font-black hover:bg-slate-200 transition-all border border-slate-200"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-3 sm:px-6 py-2.5 sm:py-4 rounded-2xl sm:rounded-3xl font-black hover:bg-slate-200 transition-all border border-slate-200 text-xs sm:text-sm"
               title="Download Template Excel"
             >
-              <Download size={20} />
-              <span className="hidden lg:inline uppercase text-[10px] tracking-widest">Template</span>
+              <Download size={18} />
+              <span className="uppercase text-[10px] tracking-widest">Template</span>
             </button>
-            <div className="relative">
+            <div className="relative flex-1 sm:flex-none">
               <input 
                 type="file" 
                 accept=".xlsx, .xls, .csv" 
@@ -554,28 +554,28 @@ export default function RAB({ user }: RABPageProps) {
                 disabled={isImporting}
               />
               <button 
-                className={`flex items-center justify-center gap-2 bg-white text-emerald-600 border-2 border-emerald-600 px-6 py-4 rounded-3xl font-black hover:bg-emerald-50 transition-all active:scale-95 ${isImporting ? 'opacity-50' : ''}`}
+                className={`w-full flex items-center justify-center gap-2 bg-white text-emerald-600 border-2 border-emerald-600 px-3 sm:px-6 py-2.5 sm:py-4 rounded-2xl sm:rounded-3xl font-black hover:bg-emerald-50 transition-all text-xs sm:text-sm ${isImporting ? 'opacity-50' : ''}`}
               >
-                <Upload size={20} />
-                <span className="hidden lg:inline uppercase text-[10px] tracking-widest">{isImporting ? 'Importing...' : 'Impor Excel'}</span>
+                <Upload size={18} />
+                <span className="uppercase text-[10px] tracking-widest">{isImporting ? 'Importing...' : 'Impor'}</span>
               </button>
             </div>
             
             <button 
               onClick={handleResetRAB}
               disabled={isResetting || rabItems.length === 0}
-              className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border-2 border-red-200 px-6 py-4 rounded-3xl font-black hover:bg-red-100 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border-2 border-red-200 px-3 sm:px-6 py-2.5 sm:py-4 rounded-2xl sm:rounded-3xl font-black hover:bg-red-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm"
               title="Hapus Semua Data RAB"
             >
-              <Trash2 size={20} />
-              <span className="hidden lg:inline uppercase text-[10px] tracking-widest">{isResetting ? 'Proses...' : 'Reset RAB'}</span>
+              <Trash2 size={18} />
+              <span className="hidden sm:inline uppercase text-[10px] tracking-widest">{isResetting ? 'Proses...' : 'Reset'}</span>
             </button>
 
             <button 
               onClick={() => setIsFormOpen(true)}
-              className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-8 py-4 rounded-3xl font-black hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-900/20 active:scale-95"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-3xl font-black hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-900/20 text-xs sm:text-sm active:scale-98"
             >
-              <Plus size={20} />
+              <Plus size={18} />
               Tambah Pekerjaan Baru
             </button>
           </div>
@@ -645,7 +645,7 @@ export default function RAB({ user }: RABPageProps) {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left min-w-[650px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-[0.1em]">
                 <th className="px-6 py-4">No</th>

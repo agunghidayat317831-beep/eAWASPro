@@ -277,37 +277,37 @@ export default function ProjectList({ user }: { user: UserProfile }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">Manajemen Proyek</h2>
-          <p className="text-slate-500">Kelola data proyek pembangunan pemerintah.</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Manajemen Proyek</h2>
+          <p className="text-xs sm:text-sm text-slate-500">Kelola data proyek pembangunan pemerintah.</p>
         </div>
         {(user.role === 'admin' || user.role === 'ppk') && (
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20"
+            className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 text-sm sm:text-base active:scale-98"
           >
-            <Plus size={20} />
+            <Plus size={18} />
             Tambah Proyek
           </button>
         )}
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-4">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-3">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
             placeholder="Cari nama proyek atau PT/CV..."
-            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+            className="w-full pl-9 pr-4 py-2.5 sm:py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="text-slate-400" size={20} />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Filter className="text-slate-400 shrink-0" size={18} />
           <select 
-            className="px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all bg-white"
+            className="w-full sm:w-auto px-3 py-2.5 sm:py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all bg-white"
             value={filterProgress}
             onChange={(e) => setFilterProgress(e.target.value)}
           >

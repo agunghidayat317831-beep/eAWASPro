@@ -346,9 +346,9 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
           </div>
 
           {/* Chart Section */}
-          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-lg font-bold text-gray-900">Visualisasi Kurva S</h3>
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 sm:mb-8">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900">Visualisasi Kurva S</h3>
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-0.5 bg-blue-500"></div>
@@ -361,21 +361,21 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
               </div>
             </div>
             
-            <div className="h-[400px] w-full">
+            <div className="h-[280px] sm:h-[400px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis 
                     dataKey="name" 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{fill: '#64748b', fontSize: 12}}
-                    dy={10}
+                    tick={{fill: '#64748b', fontSize: 10}}
+                    dy={5}
                   />
                   <YAxis 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{fill: '#64748b', fontSize: 12}}
+                    tick={{fill: '#64748b', fontSize: 10}}
                     domain={[0, 100]}
                     tickFormatter={(value) => `${value}%`}
                   />
@@ -391,9 +391,9 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                     dataKey="rencana" 
                     name="Rencana (Target)" 
                     stroke="#3b82f6" 
-                    strokeWidth={3}
-                    dot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
-                    activeDot={{ r: 8 }}
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6 }}
                   />
                   
                   {/* Actual Line */}
@@ -402,9 +402,9 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                     dataKey="realisasi" 
                     name="Realisasi (Lapangan)" 
                     stroke="#10b981" 
-                    strokeWidth={3}
-                    dot={{ r: 6, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
-                    activeDot={{ r: 8 }}
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6 }}
                   />
 
                   {/* Scatter points for "Scatter Chart" look as requested */}
@@ -419,11 +419,11 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
 
           {/* Data Table */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100">
-              <h3 className="text-lg font-bold text-gray-900">Detail Data Mingguan</h3>
+            <div className="p-4 sm:p-6 border-b border-gray-100">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900">Detail Data Mingguan</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[600px]">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Minggu</th>

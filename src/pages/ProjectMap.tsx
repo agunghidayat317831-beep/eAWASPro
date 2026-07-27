@@ -5,6 +5,7 @@ import L from 'leaflet';
 import { getProjects } from '../services/firestore';
 import { Project, UserProfile } from '../types';
 import { MapPin, Building2, TrendingUp, Info } from 'lucide-react';
+import PopupVideoPlayer from '../components/PopupVideoPlayer';
 
 // Fix for default marker icons in Leaflet with React
 // @ts-ignore
@@ -53,6 +54,7 @@ const getMarkerIcon = (progress: number) => {
 export default function ProjectMap({ user }: { user: UserProfile }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [showLegend, setShowLegend] = useState(false);
 
   useEffect(() => {
     const unsubscribe = getProjects((data) => {
@@ -76,15 +78,15 @@ export default function ProjectMap({ user }: { user: UserProfile }) {
   const center = { lat: -6.2088, lng: 106.8456 }; // Jakarta default
 
   return (
-    <div className="space-y-6 h-[calc(100vh-120px)] flex flex-col">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4 h-[calc(100vh-140px)] sm:h-[calc(100vh-120px)] flex flex-col">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">Peta Lokasi Proyek</h2>
-          <p className="text-slate-500">Pemetaan geografis seluruh proyek pembangunan.</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Peta Lokasi Proyek</h2>
+          <p className="text-xs sm:text-sm text-slate-500">Pemetaan geografis seluruh proyek pembangunan.</p>
         </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden relative">
+      <div className="flex-1 bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 overflow-hidden relative min-h-[350px]">
         <MapContainer 
           center={[center.lat, center.lng]} 
           zoom={10} 
@@ -105,32 +107,39 @@ export default function ProjectMap({ user }: { user: UserProfile }) {
               }}
             >
               <Popup className="custom-popup">
-                <div className="p-1 min-w-[200px] space-y-3">
-                  <h4 className="font-bold text-slate-900 text-sm leading-tight">{project.name}</h4>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-xs text-slate-600">
-                      <Building2 size={14} className="text-slate-400" />
-                      <span>{project.ptCv}</span>
+                <div className="p-1 min-w-[220px] max-w-[280px] sm:min-w-[280px] sm:max-w-[320px] space-y-3">
+                  <PopupVideoPlayer 
+                    projectId={project.id} 
+                    projectName={project.name}
+                    progress={project.progress} 
+                  />
+                  
+                  <div className="space-y-1 border-t border-slate-100 pt-2">
+                    <h4 className="font-bold text-slate-900 text-xs sm:text-sm leading-snug">{project.name}</h4>
+                    <div className="flex items-center gap-2 text-[11px] sm:text-xs text-slate-600">
+                      <Building2 size={12} className="text-slate-400 shrink-0" />
+                      <span className="truncate">{project.ptCv}</span>
                     </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-600">
-                    <TrendingUp size={14} className="text-slate-400" />
-                    <span 
-                      className="font-bold"
-                      style={{ color: project.progress > 75 ? '#10b981' : project.progress > 50 ? '#f59e0b' : project.progress > 25 ? '#f97316' : '#ef4444' }}
-                    >
-                      {project.progress}% Progress
-                    </span>
+                    <div className="flex items-center gap-2 text-[11px] sm:text-xs text-slate-600">
+                      <TrendingUp size={12} className="text-slate-400 shrink-0" />
+                      <span 
+                        className="font-bold"
+                        style={{ color: project.progress > 75 ? '#10b981' : project.progress > 50 ? '#f59e0b' : project.progress > 25 ? '#f97316' : '#ef4444' }}
+                      >
+                        {project.progress}% Progress
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${project.progress}%`,
-                      backgroundColor: project.progress > 75 ? '#10b981' : project.progress > 50 ? '#f59e0b' : project.progress > 25 ? '#f97316' : '#ef4444'
-                    }}
-                  ></div>
-                </div>
+                  
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${project.progress}%`,
+                        backgroundColor: project.progress > 75 ? '#10b981' : project.progress > 50 ? '#f59e0b' : project.progress > 25 ? '#f97316' : '#ef4444'
+                      }}
+                    ></div>
+                  </div>
                 </div>
               </Popup>
             </Marker>
@@ -138,54 +147,77 @@ export default function ProjectMap({ user }: { user: UserProfile }) {
           {selectedProject && <RecenterMap lat={selectedProject.lat} lng={selectedProject.lng} />}
         </MapContainer>
 
-        {/* Map Legend */}
-        <div className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur-md rounded-xl shadow-lg border border-white/20 p-3 space-y-2">
-          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Keterangan Progress</p>
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
-              <div className="w-3 h-3 rounded-full bg-[#10b981]"></div>
-              <span>Selesai (76-100%)</span>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
-              <div className="w-3 h-3 rounded-full bg-[#f59e0b]"></div>
-              <span>Lanjut (51-75%)</span>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
-              <div className="w-3 h-3 rounded-full bg-[#f97316]"></div>
-              <span>Awal (26-50%)</span>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
-              <div className="w-3 h-3 rounded-full bg-[#ef4444]"></div>
-              <span>Persiapan (0-25%)</span>
+        {/* Map Legend - Collapsible on Mobile */}
+        <div className="absolute bottom-3 left-3 z-10">
+          <button 
+            onClick={() => setShowLegend(!showLegend)}
+            className="sm:hidden bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 shadow-md border border-slate-200/50 flex items-center gap-1.5"
+          >
+            <Info size={14} className="text-emerald-600" />
+            <span>Legend</span>
+          </button>
+          
+          <div className={`${showLegend ? 'block' : 'hidden'} sm:block bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-slate-100 p-2.5 sm:p-3 space-y-2 mt-2 sm:mt-0`}>
+            <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Keterangan Progress</p>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#10b981]"></div>
+                <span>Selesai (76-100%)</span>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]"></div>
+                <span>Lanjut (51-75%)</span>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#f97316]"></div>
+                <span>Awal (26-50%)</span>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#ef4444]"></div>
+                <span>Persiapan (0-25%)</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Sidebar overlay for project details on map */}
-        <div className="absolute top-4 right-4 z-10 w-72 max-h-[calc(100%-32px)] overflow-y-auto bg-white/90 backdrop-blur-md rounded-2xl shadow-xl border border-white/20 p-4 space-y-4">
-          <div className="flex items-center gap-2 text-slate-900 font-bold border-b border-slate-100 pb-2">
-            <Info size={18} className="text-emerald-600" />
-            <span>Info Lokasi</span>
-          </div>
-          
-          {selectedProject ? (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Nama Proyek</p>
-                <p className="text-sm font-bold text-slate-900">{selectedProject.name}</p>
+        {/* Info overlay on mobile/desktop */}
+        {selectedProject && (
+          <div className="absolute bottom-3 right-3 left-3 sm:left-auto sm:top-4 sm:right-4 z-10 sm:w-72 max-h-[50vh] sm:max-h-[calc(100%-32px)] overflow-y-auto bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/60 p-3.5 sm:p-4 space-y-3">
+            <div className="flex items-center justify-between text-slate-900 font-bold border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <Info size={16} className="text-emerald-600" />
+                <span className="text-xs sm:text-sm">Info Lokasi</span>
               </div>
-              <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Lokasi</p>
-                <div className="flex items-center gap-1 text-slate-600 text-xs">
-                  <MapPin size={12} />
-                  <span>{selectedProject.location}</span>
+              <button 
+                onClick={() => setSelectedProject(null)}
+                className="text-xs text-slate-400 hover:text-slate-600 p-1"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-3 text-xs">
+              <PopupVideoPlayer 
+                projectId={selectedProject.id} 
+                projectName={selectedProject.name}
+                progress={selectedProject.progress} 
+              />
+              <div className="space-y-0.5">
+                <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Nama Proyek</p>
+                <p className="font-bold text-slate-900 leading-tight">{selectedProject.name}</p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Lokasi</p>
+                <div className="flex items-center gap-1 text-slate-600">
+                  <MapPin size={12} className="shrink-0" />
+                  <span className="truncate">{selectedProject.location}</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2 bg-slate-50 rounded-lg">
                   <p className="text-[9px] uppercase text-slate-400 font-bold">Progress</p>
                   <p 
-                    className="text-sm font-bold"
+                    className="font-bold text-xs sm:text-sm"
                     style={{ color: selectedProject.progress > 75 ? '#10b981' : selectedProject.progress > 50 ? '#f59e0b' : selectedProject.progress > 25 ? '#f97316' : '#ef4444' }}
                   >
                     {selectedProject.progress}%
@@ -196,20 +228,9 @@ export default function ProjectMap({ user }: { user: UserProfile }) {
                   <p className="text-xs font-bold text-slate-900 truncate">Rp {selectedProject.anggaran.toLocaleString('id-ID')}</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setSelectedProject(null)}
-                className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors"
-              >
-                Tutup Detail
-              </button>
             </div>
-          ) : (
-            <div className="py-8 text-center space-y-2">
-              <MapPin size={32} className="mx-auto text-slate-300" />
-              <p className="text-xs text-slate-500">Klik marker pada peta untuk melihat detail proyek.</p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

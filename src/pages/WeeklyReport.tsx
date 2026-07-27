@@ -500,16 +500,16 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => navigate('/proyek')}
-            className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-all"
+            className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-all shrink-0"
           >
             <ArrowLeft size={20} />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Laporan Mingguan</h1>
-            <p className="text-gray-500">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">Laporan Mingguan</h1>
+            <p className="text-xs sm:text-sm text-gray-500">
               {selectedProject ? (
                 <span className="flex flex-wrap items-center gap-2">
                   <span>Proyek: <span className="font-semibold text-gray-700">{selectedProject.name}</span></span>
@@ -524,12 +524,12 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="relative w-full sm:w-auto">
             <select
               value={selectedProject?.id || ''}
               onChange={(e) => setSelectedProject(projects.find(p => p.id === e.target.value) || null)}
-              className="appearance-none px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-w-[200px] pr-10 font-medium text-gray-700"
+              className="w-full sm:w-auto appearance-none px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-w-[200px] pr-10 font-medium text-sm text-gray-700"
             >
               {projects.map(project => (
                 <option key={project.id} value={project.id}>{project.name}</option>
@@ -543,10 +543,10 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
           {canModify && (
             <button
               onClick={() => handleOpenModal()}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-semibold"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-semibold text-sm active:scale-98"
             >
-              <Plus size={20} />
-              <span className="hidden sm:inline">Tambah Laporan</span>
+              <Plus size={18} />
+              <span>Tambah Laporan</span>
             </button>
           )}
         </div>
@@ -621,7 +621,7 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
           {/* Reports Table */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Minggu Ke-</th>

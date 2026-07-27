@@ -238,17 +238,17 @@ export default function ProviderList({ user }: ProviderListProps) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Daftar Penyedia</h1>
-          <p className="text-slate-500 font-medium">Manajemen data CV/PT penyedia jasa</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Daftar Penyedia</h1>
+          <p className="text-xs sm:text-sm text-slate-500 font-medium">Manajemen data CV/PT penyedia jasa</p>
         </div>
         {isAdmin && (
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 active:scale-95"
+            className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 text-sm active:scale-98"
           >
-            <Plus size={20} />
+            <Plus size={18} />
             Tambah Penyedia
           </button>
         )}

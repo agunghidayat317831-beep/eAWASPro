@@ -25,15 +25,15 @@ import { getProjects, getProviders } from '../services/firestore';
 import { Project, UserProfile, Provider } from '../types';
 
 const StatCard = ({ title, value, icon: Icon, color, subValue }: any) => (
-  <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-    <div className="flex items-start justify-between">
-      <div>
-        <p className="text-sm font-medium text-slate-500 mb-1">{title}</p>
-        <h3 className="text-3xl font-bold text-slate-900">{value}</h3>
-        {subValue && <p className="text-xs text-slate-400 mt-1">{subValue}</p>}
+  <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-xs sm:text-sm font-medium text-slate-500 mb-1 truncate">{title}</p>
+        <h3 className="text-2xl sm:text-3xl font-bold text-slate-900">{value}</h3>
+        {subValue && <p className="text-[10px] sm:text-xs text-slate-400 mt-1 line-clamp-1">{subValue}</p>}
       </div>
-      <div className={`p-3 rounded-xl ${color}`}>
-        <Icon size={24} className="text-white" />
+      <div className={`p-2.5 sm:p-3 rounded-xl shrink-0 ${color}`}>
+        <Icon size={20} className="text-white sm:w-6 sm:h-6" />
       </div>
     </div>
   </div>
@@ -108,19 +108,19 @@ export default function Dashboard({ user }: { user: UserProfile }) {
   ].filter(d => d.value > 0);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-slate-900">Dashboard Monitoring</h2>
-        <p className="text-slate-500">Ringkasan status proyek pemerintah saat ini.</p>
+        <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Dashboard Monitoring</h2>
+        <p className="text-xs sm:text-sm text-slate-500">Ringkasan status proyek pemerintah saat ini.</p>
       </div>
 
       {/* Proyek Section */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-          <Briefcase size={20} className="text-slate-700" />
+      <div className="space-y-3 sm:space-y-4">
+        <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+          <Briefcase size={18} className="text-slate-700 sm:w-5 sm:h-5" />
           Statistik Proyek
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
           <StatCard 
             title="Total Proyek" 
             value={totalProjects} 
@@ -150,12 +150,12 @@ export default function Dashboard({ user }: { user: UserProfile }) {
       </div>
 
       {/* Penyedia Section */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-          <Building2 size={20} className="text-slate-700" />
+      <div className="space-y-3 sm:space-y-4">
+        <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+          <Building2 size={18} className="text-slate-700 sm:w-5 sm:h-5" />
           Statistik Penyedia Terdaftar
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
           <StatCard 
             title="Total Penyedia" 
             value={totalProviders} 
@@ -179,15 +179,15 @@ export default function Dashboard({ user }: { user: UserProfile }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-900 mb-6">Progress Proyek Terbaru</h3>
-          <div className="h-[300px]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+        <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-4 sm:mb-6">Progress Proyek Terbaru</h3>
+          <div className="h-[250px] sm:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10}} />
                 <Tooltip 
                   cursor={{fill: '#f8fafc'}}
                   contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
@@ -208,17 +208,17 @@ export default function Dashboard({ user }: { user: UserProfile }) {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-900 mb-6">Status Proyek</h3>
-          <div className="h-[300px]">
+        <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-4 sm:mb-6">Status Proyek</h3>
+          <div className="h-[220px] sm:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={pieData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
+                  innerRadius={50}
+                  outerRadius={75}
                   paddingAngle={5}
                   dataKey="value"
                 >
@@ -230,14 +230,14 @@ export default function Dashboard({ user }: { user: UserProfile }) {
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="space-y-3 mt-4">
+          <div className="space-y-2.5 mt-3 sm:mt-4">
             {pieData.map((item) => (
-              <div key={item.name} className="flex items-center justify-between">
+              <div key={item.name} className="flex items-center justify-between text-xs sm:text-sm">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{backgroundColor: item.color}}></div>
-                  <span className="text-sm text-slate-600">{item.name}</span>
+                  <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: item.color}}></div>
+                  <span className="text-slate-600">{item.name}</span>
                 </div>
-                <span className="text-sm font-bold text-slate-900">{item.value}</span>
+                <span className="font-bold text-slate-900">{item.value}</span>
               </div>
             ))}
           </div>
@@ -245,14 +245,14 @@ export default function Dashboard({ user }: { user: UserProfile }) {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900">Daftar Proyek Terbaru</h3>
-          <Link to="/proyek" className="text-sm text-emerald-600 font-medium flex items-center gap-1 hover:underline">
+        <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="text-base sm:text-lg font-bold text-slate-900">Daftar Proyek Terbaru</h3>
+          <Link to="/proyek" className="text-xs sm:text-sm text-emerald-600 font-medium flex items-center gap-1 hover:underline">
             Lihat Semua <ArrowUpRight size={16} />
           </Link>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left min-w-[600px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                 <th className="px-6 py-4 font-semibold">Nama Proyek</th>
