@@ -44,6 +44,7 @@ export interface ProjectPhoto {
   id: string;
   projectId: string;
   url: string;
+  type?: 'image' | 'video';
   category: '0%' | '50%' | '100%';
   description?: string;
   date: string;

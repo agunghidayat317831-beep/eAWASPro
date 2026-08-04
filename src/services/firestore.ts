@@ -259,6 +259,15 @@ export const addPhoto = async (projectId: string, photo: Omit<ProjectPhoto, 'id'
   }
 };
 
+export const deletePhoto = async (projectId: string, photoId: string) => {
+  const path = `projects/${projectId}/photos/${photoId}`;
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'photos', photoId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
 // Weekly Reports
 export const getWeeklyReports = (projectId: string, callback: (reports: WeeklyReport[]) => void) => {
   const path = `projects/${projectId}/weekly_reports`;

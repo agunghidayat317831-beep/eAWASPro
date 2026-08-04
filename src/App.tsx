@@ -45,7 +45,7 @@ const Sidebar = ({ user, onLogout }: { user: UserProfile | null, onLogout: () =>
     { name: 'Proyek', path: '/proyek', icon: Briefcase },
     { name: 'Penyedia', path: '/penyedia', icon: Building2, hideForRoles: ['pengawas'] },
     { name: 'RAB Proyek', path: '/rab', icon: Calculator },
-    { name: 'Foto Kegiatan', path: '/foto', icon: Camera },
+    { name: 'Foto & Video', path: '/foto', icon: Camera },
     { name: 'Laporan Mingguan', path: '/laporan', icon: FileText },
     { name: 'Kurva S', path: '/kurva-s', icon: LineChart },
     { name: 'Peta Lokasi', path: '/peta', icon: MapPin },
