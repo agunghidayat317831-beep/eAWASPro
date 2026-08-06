@@ -50,6 +50,8 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -88,18 +90,98 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
     }
   }, [selectedProjectId]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Helper to compress image files before storing as DataURL
+  const compressImageFile = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const MAX_DIM = 1200;
+
+          if (width > height) {
+            if (width > MAX_DIM) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
+            }
+          } else {
+            if (height > MAX_DIM) {
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          let quality = 0.7;
+          let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+          // If compressed string is still large (> 700KB), lower quality
+          if (dataUrl.length > 700000) {
+            dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+          }
+
+          resolve(dataUrl);
+        };
+        img.onerror = (err) => reject(err);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    setFileError(null);
+    setFilePreview(null);
+
     if (file) {
       setSelectedFile(file);
       const isVideo = file.type.startsWith('video/');
       setMediaType(isVideo ? 'video' : 'image');
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFilePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      if (isVideo) {
+        // Firestore doc limit is 1MB total. 700KB raw video file becomes ~930KB base64.
+        if (file.size > 700 * 1024) {
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+          setFileError(`Ukuran video (${sizeMB} MB) melebihi batas upload langsung (Maks. 700 KB). Silakan gunakan tab 'Tautan URL Video/Foto' untuk video berukuran besar, atau pilih video berdurasi singkat / klip kecil (< 700 KB).`);
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFilePreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // Image processing with automatic compression
+        setIsCompressing(true);
+        try {
+          const compressedUrl = await compressImageFile(file);
+          if (compressedUrl.length > 850000) {
+            setFileError('Ukuran gambar terlalu besar bahkan setelah dikompresi. Silakan gunakan foto beresolusi lebih kecil atau gunakan opsi Tautan URL.');
+          } else {
+            setFilePreview(compressedUrl);
+          }
+        } catch (err) {
+          console.error(err);
+          setFileError('Gagal mengompresi gambar.');
+        } finally {
+          setIsCompressing(false);
+        }
+      }
     }
   };
 
@@ -109,6 +191,12 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
 
     if (!formData.projectId || !finalUrl) {
       alert('Silakan pilih proyek dan tentukan file foto/video atau tautan URL.');
+      return;
+    }
+
+    // Safety check against Firestore 1MB document limit
+    if (finalUrl.length > 850000) {
+      alert(`Ukuran data media (${(finalUrl.length / (1024 * 1024)).toFixed(2)} MB) melebihi batas dokumen Firestore (Maksimal 1 MB per dokumen). Silakan gunakan tab 'Tautan URL Video/Foto' untuk media berukuran besar.`);
       return;
     }
 
@@ -123,6 +211,7 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
       setIsModalOpen(false);
       setSelectedFile(null);
       setFilePreview(null);
+      setFileError(null);
       setUrlInput('');
       setFormData({
         projectId: '',
@@ -131,9 +220,13 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
         date: new Date().toISOString().split('T')[0],
         progress: 0
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Gagal mengunggah dokumentasi.');
+      if (err?.message?.includes('exceeds the maximum allowed size') || err?.error?.includes('exceeds the maximum allowed size')) {
+        alert('File terlalu besar untuk disimpan langsung di database. Silakan gunakan tab "Tautan URL Video/Foto" atau perkecil ukuran file.');
+      } else {
+        alert('Gagal mengunggah dokumentasi: ' + (err?.message || 'Terjadi kesalahan.'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -477,7 +570,13 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
                       htmlFor="file-upload"
                       className="flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 hover:border-emerald-500 transition-all overflow-hidden p-2"
                     >
-                      {filePreview ? (
+                      {isCompressing ? (
+                        <div className="flex flex-col items-center justify-center py-6 text-center">
+                          <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+                          <p className="font-bold text-slate-700">Mengompresi Gambar...</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Memperkecil ukuran agar sesuai batas simpan database</p>
+                        </div>
+                      ) : filePreview ? (
                         mediaType === 'video' ? (
                           <video src={filePreview} controls className="w-full h-32 object-cover rounded-xl" />
                         ) : (
@@ -491,11 +590,28 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
                             <Camera className="w-8 h-8 text-emerald-400 mb-2" />
                           )}
                           <p className="font-bold text-slate-700">Klik untuk memilih file {mediaType === 'video' ? 'Video (MP4/WebM)' : 'Foto'}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">Mendukung format gambar & video singkat</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Foto akan otomatis dikompresi (&lt; 700 KB). Video singkat &lt; 700 KB.</p>
                         </div>
                       )}
                     </label>
                   </div>
+
+                  {fileError && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs leading-relaxed space-y-1">
+                      <p className="font-bold">Perhatian Upload File:</p>
+                      <p>{fileError}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUploadMode('url');
+                          setFileError(null);
+                        }}
+                        className="mt-1 px-3 py-1 bg-amber-600 text-white rounded-lg text-[11px] font-bold hover:bg-amber-700 transition-colors inline-block"
+                      >
+                        Pindah ke Input Tautan URL
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">

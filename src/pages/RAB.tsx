@@ -522,30 +522,35 @@ export default function RAB({ user }: RABPageProps) {
 
   return (
     <div className="space-y-6 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="space-y-4">
+        <div className="flex items-start gap-3">
           <button 
             onClick={() => setSelectedProject(null)}
-            className="p-2 sm:p-3 hover:bg-slate-100 rounded-2xl transition-colors shrink-0"
+            className="p-2 sm:p-3 hover:bg-slate-100 rounded-2xl transition-colors shrink-0 mt-0.5"
           >
             <ArrowLeft size={20} className="sm:w-6 sm:h-6" />
           </button>
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight truncate">RAB: {selectedProject.name}</h1>
-            <p className="text-xs sm:text-sm text-slate-500 font-medium truncate">{selectedProject.contractNumber || 'No. Kontrak belum tersedia'}</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug break-words line-clamp-2">
+              RAB: {selectedProject.name}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1 truncate">
+              {selectedProject.contractNumber || 'No. Kontrak belum tersedia'}
+            </p>
           </div>
         </div>
+
         {canEdit && !isFormOpen && (
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-1">
             <button 
               onClick={downloadTemplate}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-3 sm:px-6 py-2.5 sm:py-4 rounded-2xl sm:rounded-3xl font-black hover:bg-slate-200 transition-all border border-slate-200 text-xs sm:text-sm"
+              className="flex items-center justify-center gap-2 bg-slate-100 text-slate-700 px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-2xl font-black hover:bg-slate-200 transition-all border border-slate-200 text-xs sm:text-sm"
               title="Download Template Excel"
             >
               <Download size={18} />
               <span className="uppercase text-[10px] tracking-widest">Template</span>
             </button>
-            <div className="relative flex-1 sm:flex-none">
+            <div className="relative">
               <input 
                 type="file" 
                 accept=".xlsx, .xls, .csv" 
@@ -554,7 +559,7 @@ export default function RAB({ user }: RABPageProps) {
                 disabled={isImporting}
               />
               <button 
-                className={`w-full flex items-center justify-center gap-2 bg-white text-emerald-600 border-2 border-emerald-600 px-3 sm:px-6 py-2.5 sm:py-4 rounded-2xl sm:rounded-3xl font-black hover:bg-emerald-50 transition-all text-xs sm:text-sm ${isImporting ? 'opacity-50' : ''}`}
+                className={`flex items-center justify-center gap-2 bg-white text-emerald-600 border-2 border-emerald-600 px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-2xl font-black hover:bg-emerald-50 transition-all text-xs sm:text-sm ${isImporting ? 'opacity-50' : ''}`}
               >
                 <Upload size={18} />
                 <span className="uppercase text-[10px] tracking-widest">{isImporting ? 'Importing...' : 'Impor'}</span>
@@ -564,16 +569,16 @@ export default function RAB({ user }: RABPageProps) {
             <button 
               onClick={handleResetRAB}
               disabled={isResetting || rabItems.length === 0}
-              className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border-2 border-red-200 px-3 sm:px-6 py-2.5 sm:py-4 rounded-2xl sm:rounded-3xl font-black hover:bg-red-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm"
+              className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border-2 border-red-200 px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-2xl font-black hover:bg-red-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-xs sm:text-sm"
               title="Hapus Semua Data RAB"
             >
               <Trash2 size={18} />
-              <span className="hidden sm:inline uppercase text-[10px] tracking-widest">{isResetting ? 'Proses...' : 'Reset'}</span>
+              <span className="uppercase text-[10px] tracking-widest">{isResetting ? 'Proses...' : 'Reset'}</span>
             </button>
 
             <button 
               onClick={() => setIsFormOpen(true)}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-3xl font-black hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-900/20 text-xs sm:text-sm active:scale-98"
+              className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-900/20 text-xs sm:text-sm active:scale-98"
             >
               <Plus size={18} />
               Tambah Pekerjaan Baru

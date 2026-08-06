@@ -447,13 +447,20 @@ export default function ProjectList({ user }: { user: UserProfile }) {
                   </div>
                 </div>
 
-                <div className="pt-2">
+                <div className="pt-2 space-y-2">
                   <button 
                     onClick={() => navigate('/rab', { state: { projectId: project.id } })}
                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-emerald-50 hover:text-emerald-600 transition-all border border-slate-100"
                   >
                     <Calculator size={18} />
                     Lihat RAB
+                  </button>
+                  <button 
+                    onClick={() => navigate('/laporan', { state: { projectId: project.id } })}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100"
+                  >
+                    <FileText size={18} />
+                    Laporan Mingguan
                   </button>
                 </div>
               </div>
