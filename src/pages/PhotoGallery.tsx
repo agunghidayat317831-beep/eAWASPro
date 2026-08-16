@@ -554,18 +554,47 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
 
               {/* Upload Input */}
               {uploadMode === 'file' ? (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label className="font-bold text-slate-700 block">
-                    Pilih File {mediaType === 'video' ? 'Video' : 'Foto'}
+                    Pilih Metode Upload {mediaType === 'video' ? 'Video' : 'Foto'}
                   </label>
+
+                  {/* Hidden inputs: One for direct camera capture, one for file/gallery selection */}
+                  <input 
+                    type="file"
+                    accept={mediaType === 'video' ? 'video/*' : 'image/*'}
+                    capture="environment"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="camera-upload"
+                  />
+                  <input 
+                    type="file"
+                    accept={mediaType === 'video' ? 'video/*' : 'image/*'}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="file-upload"
+                  />
+
+                  {/* Dual Action Buttons for Quick Access */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label 
+                      htmlFor="camera-upload"
+                      className="flex items-center justify-center gap-2 p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs cursor-pointer transition-all active:scale-98 shadow-sm text-center"
+                    >
+                      <Camera size={18} className="shrink-0" />
+                      <span>{mediaType === 'video' ? 'Rekam Video' : 'Ambil Kamera'}</span>
+                    </label>
+                    <label 
+                      htmlFor="file-upload"
+                      className="flex items-center justify-center gap-2 p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs cursor-pointer transition-all active:scale-98 text-center"
+                    >
+                      <Upload size={18} className="shrink-0" />
+                      <span>Galeri / File</span>
+                    </label>
+                  </div>
+
                   <div className="relative group">
-                    <input 
-                      type="file"
-                      accept={mediaType === 'video' ? 'video/*' : 'image/*'}
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="file-upload"
-                    />
                     <label 
                       htmlFor="file-upload"
                       className="flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-50 hover:border-emerald-500 transition-all overflow-hidden p-2"
@@ -589,7 +618,7 @@ export default function PhotoGallery({ user }: { user: UserProfile }) {
                           ) : (
                             <Camera className="w-8 h-8 text-emerald-400 mb-2" />
                           )}
-                          <p className="font-bold text-slate-700">Klik untuk memilih file {mediaType === 'video' ? 'Video (MP4/WebM)' : 'Foto'}</p>
+                          <p className="font-bold text-slate-700">Atau klik di sini untuk memilih dari Galeri/Kamera</p>
                           <p className="text-[11px] text-slate-400 mt-0.5">Foto akan otomatis dikompresi (&lt; 700 KB). Video singkat &lt; 700 KB.</p>
                         </div>
                       )}
