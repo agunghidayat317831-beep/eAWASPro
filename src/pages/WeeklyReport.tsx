@@ -14,7 +14,9 @@ import {
   MessageCircle,
   X,
   Copy,
-  Check
+  Check,
+  Printer,
+  Download
 } from 'lucide-react';
 import { 
   getProjects, 
@@ -29,6 +31,7 @@ import {
 import { Project, WeeklyReport as WeeklyReportType, Provider, UserProfile, RABItem, WeeklyReportDetail } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { WeeklyReportPDFModal } from '../components/WeeklyReportPDFModal';
 
 interface WeeklyReportProps {
   user: UserProfile | null;
@@ -48,6 +51,8 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
   const [reports, setReports] = useState<WeeklyReportType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
+  const [selectedPDFWeek, setSelectedPDFWeek] = useState<number | 'all'>('all');
   const [editingReport, setEditingReport] = useState<WeeklyReportType | null>(null);
   const [rabItems, setRabItems] = useState<RABItem[]>([]);
   const [reportDetails, setReportDetails] = useState<WeeklyReportDetail[]>([]);
@@ -132,13 +137,20 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
   useEffect(() => {
     if (selectedProject) {
       setLoading(true);
-      const unsubscribe = getWeeklyReports(selectedProject.id, (data) => {
+      const unsubscribeReports = getWeeklyReports(selectedProject.id, (data) => {
         setReports(data);
         setLoading(false);
       });
-      return () => unsubscribe();
+      const unsubscribeRAB = getRABItems(selectedProject.id, (items) => {
+        setRabItems(items);
+      });
+      return () => {
+        unsubscribeReports();
+        unsubscribeRAB();
+      };
     } else {
       setReports([]);
+      setRabItems([]);
     }
   }, [selectedProject]);
 
@@ -540,6 +552,20 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
             </div>
           </div>
 
+          {selectedProject && (
+            <button
+              onClick={() => {
+                setSelectedPDFWeek('all');
+                setIsPDFModalOpen(true);
+              }}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-sm font-semibold text-sm active:scale-98"
+              title="Cetak Laporan Lengkap & Kurva S (PDF)"
+            >
+              <Printer size={18} />
+              <span>Cetak Laporan (PDF)</span>
+            </button>
+          )}
+
           {canModify && (
             <button
               onClick={() => handleOpenModal()}
@@ -630,7 +656,7 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-center">Progres Kumulatif</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-center">Status</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Catatan</th>
-                    {canModify && <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Aksi</th>}
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -701,24 +727,38 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                           {report.notes || '-'}
                         </p>
                       </td>
-                      {canModify && (
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button 
-                              onClick={() => handleOpenModal(report)}
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            >
-                              <Edit2 size={18} />
-                            </button>
-                            <button 
-                              onClick={() => handleDelete(report.id)}
-                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-                        </td>
-                      )}
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button 
+                            onClick={() => {
+                              setSelectedPDFWeek(report.weekNumber);
+                              setIsPDFModalOpen(true);
+                            }}
+                            className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                            title={`Cetak Laporan Minggu ke-${report.weekNumber} (PDF)`}
+                          >
+                            <Printer size={17} />
+                          </button>
+                          {canModify && (
+                            <>
+                              <button 
+                                onClick={() => handleOpenModal(report)}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Edit Laporan"
+                              >
+                                <Edit2 size={17} />
+                              </button>
+                              <button 
+                                onClick={() => handleDelete(report.id)}
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Hapus Laporan"
+                              >
+                                <Trash2 size={17} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1194,6 +1234,20 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
             
           </div>
         </div>
+      )}
+
+      {/* PDF Export & Print Modal */}
+      {selectedProject && isPDFModalOpen && (
+        <WeeklyReportPDFModal
+          isOpen={isPDFModalOpen}
+          onClose={() => setIsPDFModalOpen(false)}
+          project={selectedProject}
+          reports={reports}
+          providers={providers}
+          ppkList={ppkList}
+          rabItems={rabItems}
+          defaultSelectedWeek={selectedPDFWeek}
+        />
       )}
     </div>
   );
