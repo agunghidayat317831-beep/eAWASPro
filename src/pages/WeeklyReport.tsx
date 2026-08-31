@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, 
   Plus, 
@@ -154,6 +154,50 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
     }
   }, [selectedProject]);
 
+  const getPreviousWeekCumulative = (targetWeekNum: number, currentReportId?: string) => {
+    const previousReports = reports
+      .filter(r => (!currentReportId || r.id !== currentReportId) && r.weekNumber < targetWeekNum)
+      .sort((a, b) => a.weekNumber - b.weekNumber);
+    
+    let sumWeekly = 0;
+    for (const r of previousReports) {
+      sumWeekly = parseFloat((sumWeekly + (Number(r.weeklyProgress) || 0)).toFixed(2));
+    }
+    return sumWeekly;
+  };
+
+  // Compute calculated cumulative progress for all reports (Kumulatif N = Kumulatif N-1 + Mingguan N)
+  const sortedReportsWithCumulative = useMemo(() => {
+    const sorted = [...reports].sort((a, b) => a.weekNumber - b.weekNumber);
+    let runningCum = 0;
+    return sorted.map((report) => {
+      const weekly = Number(report.weeklyProgress) || 0;
+      const prevCum = runningCum;
+      runningCum = parseFloat((runningCum + weekly).toFixed(2));
+      return {
+        ...report,
+        weeklyProgress: weekly,
+        prevCumulative: prevCum,
+        cumulativeProgress: runningCum,
+      };
+    });
+  }, [reports]);
+
+  // Synchronize Firestore cumulativeProgress if any record had out-of-sync data
+  useEffect(() => {
+    if (!selectedProject || reports.length === 0) return;
+    
+    const sorted = [...reports].sort((a, b) => a.weekNumber - b.weekNumber);
+    let runCum = 0;
+    sorted.forEach((rep) => {
+      const weekly = Number(rep.weeklyProgress) || 0;
+      runCum = parseFloat((runCum + weekly).toFixed(2));
+      if (rep.cumulativeProgress !== runCum) {
+        updateWeeklyReport(selectedProject.id, rep.id, { cumulativeProgress: runCum }).catch(console.error);
+      }
+    });
+  }, [selectedProject, reports]);
+
   const handleOpenModal = (report?: WeeklyReportType) => {
     if (!selectedProject) return;
 
@@ -174,12 +218,16 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
       
       if (report) {
         setEditingReport(report);
+        const prevCumulative = getPreviousWeekCumulative(report.weekNumber, report.id);
+        const weeklyProg = Number(report.weeklyProgress) || 0;
+        const calcCumulative = Number((prevCumulative + weeklyProg).toFixed(2));
+        
         setFormData({
           weekNumber: report.weekNumber,
           startDate: report.startDate,
           endDate: report.endDate,
-          weeklyProgress: report.weeklyProgress,
-          cumulativeProgress: report.cumulativeProgress,
+          weeklyProgress: weeklyProg,
+          cumulativeProgress: calcCumulative,
           notes: report.notes || ''
         });
         
@@ -194,7 +242,7 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
         // Sort reports by week number to find the latest
         const sortedReports = [...reports].sort((a, b) => a.weekNumber - b.weekNumber);
         const nextWeek = sortedReports.length > 0 ? Math.max(...sortedReports.map(r => r.weekNumber)) + 1 : 1;
-        const lastCumulative = sortedReports.length > 0 ? sortedReports[sortedReports.length - 1].cumulativeProgress : 0;
+        const lastCumulative = getPreviousWeekCumulative(nextWeek);
         
         let startDate = '';
         let endDate = '';
@@ -217,7 +265,7 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
           startDate,
           endDate,
           weeklyProgress: 0,
-          cumulativeProgress: lastCumulative,
+          cumulativeProgress: Number(lastCumulative.toFixed(2)),
           notes: ''
         });
       }
@@ -261,9 +309,12 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
     setReportDetails(prev => {
       const updated = prev.filter(d => d.rabItemId !== rabItemId);
       
-      // Recalculate totals
+      // Progres Mingguan = Total bobot x progres minggu ini
       const totalWeekly = updated.reduce((acc, curr) => acc + (curr.progressThisWeek * curr.weight) / 100, 0);
-      const totalCumulative = updated.reduce((acc, curr) => acc + (curr.cumulativeProgress * curr.weight) / 100, 0);
+      
+      // Progres Kumulatif = Progres Minggu Sebelumnya + Progres Minggu Ini
+      const prevCumulative = getPreviousWeekCumulative(formData.weekNumber, editingReport?.id);
+      const totalCumulative = prevCumulative + totalWeekly;
 
       setFormData(f => ({
         ...f,
@@ -295,7 +346,7 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
           }
           
           // Calculate progress but cap at 100%
-          let newProgressThisWeek = (volume / detail.targetVolume) * 100;
+          let newProgressThisWeek = detail.targetVolume > 0 ? (volume / detail.targetVolume) * 100 : 0;
           let newCumulativeProgress = lastProgress + newProgressThisWeek;
 
           if (newCumulativeProgress > 100) {
@@ -319,9 +370,12 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
         return prev;
       }
 
-      // Calculate total weekly and cumulative progress
+      // Progres Mingguan = Total bobot x progres minggu ini
       const totalWeekly = updated.reduce((acc, curr) => acc + (curr.progressThisWeek * curr.weight) / 100, 0);
-      const totalCumulative = updated.reduce((acc, curr) => acc + (curr.cumulativeProgress * curr.weight) / 100, 0);
+
+      // Progres Kumulatif = Progres Minggu Sebelumnya + Progres Minggu Ini
+      const prevCumulative = getPreviousWeekCumulative(formData.weekNumber, editingReport?.id);
+      const totalCumulative = prevCumulative + totalWeekly;
 
       setFormData(f => ({
         ...f,
@@ -337,11 +391,18 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
     e.preventDefault();
     if (!selectedProject) return;
 
+    const currentWeek = Number(formData.weekNumber);
+    const prevCumulative = getPreviousWeekCumulative(currentWeek, editingReport?.id);
+    const weeklyProg = Number(formData.weeklyProgress) || 0;
+    // Progres Kumulatif Minggu N = Progres Kumulatif Minggu N-1 + Progres Minggu N
+    const cumulativeProg = parseFloat((prevCumulative + weeklyProg).toFixed(2));
+
     const reportData = {
       ...formData,
+      weekNumber: currentWeek,
       projectId: selectedProject.id,
-      weeklyProgress: Number(formData.weeklyProgress),
-      cumulativeProgress: Number(formData.cumulativeProgress),
+      weeklyProgress: weeklyProg,
+      cumulativeProgress: cumulativeProg,
       details: reportDetails
     };
 
@@ -351,12 +412,47 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
       await addWeeklyReport(selectedProject.id, reportData);
     }
 
+    // Cascade update to subsequent weeks to ensure cumulative consistency
+    const subsequentReports = reports
+      .filter(r => r.id !== editingReport?.id && r.weekNumber > currentWeek)
+      .sort((a, b) => a.weekNumber - b.weekNumber);
+
+    let runningCumulative = cumulativeProg;
+    for (const nextRep of subsequentReports) {
+      const nextWeekly = Number(nextRep.weeklyProgress || 0);
+      runningCumulative = parseFloat((runningCumulative + nextWeekly).toFixed(2));
+      if (nextRep.cumulativeProgress !== runningCumulative) {
+        await updateWeeklyReport(selectedProject.id, nextRep.id, {
+          cumulativeProgress: runningCumulative
+        });
+      }
+    }
+
     setIsModalOpen(false);
   };
 
   const handleDelete = async (reportId: string) => {
     if (!selectedProject || !window.confirm('Apakah Anda yakin ingin menghapus laporan ini?')) return;
+    const deletedReport = reports.find(r => r.id === reportId);
     await deleteWeeklyReport(selectedProject.id, reportId);
+
+    if (deletedReport) {
+      // Recalculate remaining reports to ensure continuity
+      const remainingReports = reports
+        .filter(r => r.id !== reportId)
+        .sort((a, b) => a.weekNumber - b.weekNumber);
+
+      let runningCumulative = 0;
+      for (const rep of remainingReports) {
+        const weekly = Number(rep.weeklyProgress || 0);
+        runningCumulative = parseFloat((runningCumulative + weekly).toFixed(2));
+        if (rep.cumulativeProgress !== runningCumulative) {
+          await updateWeeklyReport(selectedProject.id, rep.id, {
+            cumulativeProgress: runningCumulative
+          });
+        }
+      }
+    }
   };
 
   const getProgressColor = (progress: number) => {
@@ -605,44 +701,52 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
       ) : (
         <div className="grid grid-cols-1 gap-6">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                  <Calendar size={24} />
-                </div>
-                <span className="text-sm font-medium text-gray-400">Total Minggu</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900">{reports.length}</div>
-              <div className="text-sm text-gray-500 mt-1">Minggu pelaporan</div>
-            </div>
+          {(() => {
+            const sorted = sortedReportsWithCumulative;
+            const latestCum = sorted.length > 0 ? sorted[sorted.length - 1].cumulativeProgress : 0;
+            const avgWeekly = (sorted.reduce((acc, curr) => acc + curr.weeklyProgress, 0) / (sorted.length || 1)).toFixed(1);
 
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-green-50 text-green-600 rounded-lg">
-                  <TrendingUp size={24} />
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                      <Calendar size={24} />
+                    </div>
+                    <span className="text-sm font-medium text-gray-400">Total Minggu</span>
+                  </div>
+                  <div className="text-3xl font-bold text-gray-900">{reports.length}</div>
+                  <div className="text-sm text-gray-500 mt-1">Minggu pelaporan</div>
                 </div>
-                <span className="text-sm font-medium text-gray-400">Progres Terakhir</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900">
-                {reports[reports.length - 1].cumulativeProgress}%
-              </div>
-              <div className="text-sm text-gray-500 mt-1">Kumulatif progres</div>
-            </div>
 
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-                  <TrendingUp size={24} />
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-2 bg-green-50 text-green-600 rounded-lg">
+                      <TrendingUp size={24} />
+                    </div>
+                    <span className="text-sm font-medium text-gray-400">Progres Terakhir</span>
+                  </div>
+                  <div className="text-3xl font-bold text-emerald-700 font-mono">
+                    {latestCum}%
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">Kumulatif progres (Minggu {sorted.length > 0 ? sorted[sorted.length - 1].weekNumber : 0})</div>
                 </div>
-                <span className="text-sm font-medium text-gray-400">Rata-rata Mingguan</span>
+
+                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
+                      <TrendingUp size={24} />
+                    </div>
+                    <span className="text-sm font-medium text-gray-400">Rata-rata Mingguan</span>
+                  </div>
+                  <div className="text-3xl font-bold text-gray-900">
+                    {avgWeekly}%
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">Per minggu</div>
+                </div>
               </div>
-              <div className="text-3xl font-bold text-gray-900">
-                {(reports.reduce((acc, curr) => acc + curr.weeklyProgress, 0) / reports.length).toFixed(1)}%
-              </div>
-              <div className="text-sm text-gray-500 mt-1">Per minggu</div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Reports Table */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -660,37 +764,43 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {reports.map((report) => (
-                    <tr key={report.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <span className="font-bold text-gray-900">W-{report.weekNumber}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">
-                          {new Date(report.startDate).toLocaleDateString('id-ID')} - {new Date(report.endDate).toLocaleDateString('id-ID')}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                          +{report.weeklyProgress}%
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${getProgressColor(report.cumulativeProgress)}`}>
-                            {report.cumulativeProgress}%
-                          </span>
-                          <div className="w-16 bg-gray-100 rounded-full h-1 overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${
-                                report.cumulativeProgress >= 100 ? 'bg-green-500' : 
-                                report.cumulativeProgress >= 50 ? 'bg-blue-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${report.cumulativeProgress}%` }}
-                            />
+                  {sortedReportsWithCumulative.map((report) => {
+                    const prevCumVal = report.prevCumulative;
+
+                    return (
+                      <tr key={report.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <span className="font-bold text-gray-900">W-{report.weekNumber}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900">
+                            {new Date(report.startDate).toLocaleDateString('id-ID')} - {new Date(report.endDate).toLocaleDateString('id-ID')}
                           </div>
-                        </div>
-                      </td>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 font-mono">
+                            +{report.weeklyProgress}%
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`px-3 py-1 rounded-full text-xs font-black font-mono ${getProgressColor(report.cumulativeProgress)}`}>
+                              {report.cumulativeProgress}%
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono font-medium">
+                              {report.prevCumulative > 0 ? `${report.prevCumulative.toFixed(2)}% + ${report.weeklyProgress}%` : `${report.weeklyProgress}%`}
+                            </span>
+                            <div className="w-16 bg-gray-100 rounded-full h-1 overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${
+                                  report.cumulativeProgress >= 100 ? 'bg-green-500' : 
+                                  report.cumulativeProgress >= 50 ? 'bg-blue-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${report.cumulativeProgress}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
                       <td className="px-6 py-4 text-center">
                         {(() => {
                           const plan = getPlannedProgressForWeek(report.weekNumber);
@@ -759,8 +869,9 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                           )}
                         </div>
                       </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -801,13 +912,21 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                       <label className="text-sm font-medium text-gray-700">Minggu Ke-</label>
                       <input
                         type="number"
+                        min="1"
                         required
                         value={isNaN(formData.weekNumber) ? '' : formData.weekNumber}
                         onChange={(e) => {
                           const val = parseInt(e.target.value);
-                          setFormData({ ...formData, weekNumber: isNaN(val) ? 0 : val });
+                          const targetWeek = isNaN(val) ? 0 : val;
+                          const prevCumulative = getPreviousWeekCumulative(targetWeek, editingReport?.id);
+                          const weeklyProg = Number(formData.weeklyProgress) || 0;
+                          setFormData({
+                            ...formData,
+                            weekNumber: targetWeek,
+                            cumulativeProgress: parseFloat((prevCumulative + weeklyProg).toFixed(2))
+                          });
                         }}
-                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-800"
                       />
                     </div>
                     <div className="space-y-1">
@@ -845,17 +964,70 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                     </div>
                   </div>
 
-                  {/* Summary Data */}
-                  <div className="grid grid-cols-2 gap-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider text-blue-500 font-bold mb-1">Total Minggu Ini</div>
-                      <div className="text-2xl font-black text-blue-700">{formData.weeklyProgress}%</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider text-blue-500 font-bold mb-1">Total Kumulatif</div>
-                      <div className="text-2xl font-black text-blue-700">{formData.cumulativeProgress}%</div>
-                    </div>
-                  </div>
+                  {/* Summary Data & Cumulative Progress Formula */}
+                  {(() => {
+                    const prevCumulative = getPreviousWeekCumulative(formData.weekNumber, editingReport?.id);
+                    return (
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 p-4 rounded-xl border border-blue-200/80 space-y-2">
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="bg-white/80 p-2.5 rounded-lg border border-blue-100">
+                            <div className="text-[9.5px] uppercase tracking-wider text-slate-500 font-bold mb-0.5">
+                              s/d Minggu Lalu (W-{formData.weekNumber > 1 ? formData.weekNumber - 1 : 0})
+                            </div>
+                            <div className="text-lg font-bold text-slate-700 font-mono">
+                              {prevCumulative.toFixed(2)}%
+                            </div>
+                          </div>
+                          
+                          <div className="bg-white/80 p-2.5 rounded-lg border border-blue-100">
+                            <div className="text-[9.5px] uppercase tracking-wider text-blue-600 font-bold mb-0.5">
+                              Minggu Ini (W-{formData.weekNumber})
+                            </div>
+                            {reportDetails.length === 0 ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <span className="text-xs font-bold text-blue-600">+</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  max="100"
+                                  value={formData.weeklyProgress || ''}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setFormData({
+                                      ...formData,
+                                      weeklyProgress: val,
+                                      cumulativeProgress: parseFloat((prevCumulative + val).toFixed(2))
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                  className="w-16 px-1.5 py-0.5 bg-white border border-blue-300 rounded text-center text-sm font-black text-blue-700 outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                                <span className="text-xs font-bold text-blue-600">%</span>
+                              </div>
+                            ) : (
+                              <div className="text-lg font-black text-blue-700 font-mono">
+                                +{formData.weeklyProgress}%
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                            <div className="text-[9.5px] uppercase tracking-wider text-emerald-800 font-bold mb-0.5">
+                              Progres Kumulatif
+                            </div>
+                            <div className="text-lg font-black text-emerald-700 font-mono">
+                              {formData.cumulativeProgress}%
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-[10px] text-slate-600 text-center font-medium bg-white/70 py-1 px-2 rounded border border-blue-100/60">
+                          <span className="font-bold text-emerald-800">Rumus:</span> Progres Kumulatif ({formData.cumulativeProgress}%) = Progres Minggu Lalu ({prevCumulative.toFixed(2)}%) + Progres Minggu Ini ({formData.weeklyProgress}%)
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* RAB Details Selection */}
                   <div className="space-y-4">

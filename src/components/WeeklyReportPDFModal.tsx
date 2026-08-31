@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   X, 
   Download, 
@@ -93,10 +93,24 @@ export const WeeklyReportPDFModal: React.FC<WeeklyReportPDFModalProps> = ({
 
   const maxWeeksToDisplay = Math.max(totalPlannedWeeks, reports.length);
 
+  const computedReports = useMemo(() => {
+    const sorted = [...reports].sort((a, b) => a.weekNumber - b.weekNumber);
+    let runCum = 0;
+    return sorted.map(r => {
+      const weekly = Number(r.weeklyProgress) || 0;
+      runCum = parseFloat((runCum + weekly).toFixed(2));
+      return {
+        ...r,
+        weeklyProgress: weekly,
+        cumulativeProgress: runCum
+      };
+    });
+  }, [reports]);
+
   // Compute S-curve planned vs actual data
   const sCurveData = Array.from({ length: maxWeeksToDisplay }, (_, i) => {
     const weekNum = i + 1;
-    const actualReport = reports.find(r => r.weekNumber === weekNum);
+    const actualReport = computedReports.find(r => r.weekNumber === weekNum);
 
     let plannedCumulative = 100;
     if (weekNum <= totalPlannedWeeks) {
@@ -145,10 +159,10 @@ export const WeeklyReportPDFModal: React.FC<WeeklyReportPDFModalProps> = ({
     };
   });
 
-  const sortedReports = [...reports].sort((a, b) => a.weekNumber - b.weekNumber);
+  const sortedReports = computedReports;
   const latestReport = sortedReports.length > 0 ? sortedReports[sortedReports.length - 1] : null;
   const currentWeekNum = typeof selectedWeek === 'number' ? selectedWeek : (latestReport ? latestReport.weekNumber : 1);
-  const activeReport = reports.find(r => r.weekNumber === currentWeekNum);
+  const activeReport = computedReports.find(r => r.weekNumber === currentWeekNum);
   
   const currentPlannedData = sCurveData.find(d => d.weekNum === currentWeekNum);
   const currentPlannedCumulative = currentPlannedData?.plannedCumulative ?? 0;
@@ -392,23 +406,21 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
         const weight = activeDetail && Number(activeDetail.weight) > 0 ? Number(activeDetail.weight) : calculatedWeight;
 
         const volumeThisWeek = activeDetail ? Number(activeDetail.volumeThisWeek || 0) : 0;
-        const progressThisWeek = activeDetail ? Number(activeDetail.progressThisWeek || 0) : 0;
-
-        const cumulativeVolume = activeDetail 
-          ? Number(activeDetail.cumulativeVolume || 0) 
-          : (prevDetail ? Number(prevDetail.cumulativeVolume || 0) : 0);
-
-        const cumulativeProgress = activeDetail 
-          ? Number(activeDetail.cumulativeProgress || 0) 
-          : (prevDetail ? Number(prevDetail.cumulativeProgress || 0) : 0);
+        const progressThisWeek = activeDetail 
+          ? Number(activeDetail.progressThisWeek || 0) 
+          : (targetVolume > 0 && volumeThisWeek > 0 ? (volumeThisWeek / targetVolume) * 100 : 0);
 
         const volumeSdMggLalu = prevDetail 
           ? Number(prevDetail.cumulativeVolume || 0) 
-          : Math.max(0, cumulativeVolume - volumeThisWeek);
+          : (activeDetail ? Math.max(0, Number(activeDetail.cumulativeVolume || 0) - volumeThisWeek) : 0);
 
         const progressSdMggLalu = prevDetail 
           ? Number(prevDetail.cumulativeProgress || 0) 
-          : (targetVolume > 0 ? (volumeSdMggLalu / targetVolume) * 100 : Math.max(0, cumulativeProgress - progressThisWeek));
+          : (activeDetail ? Math.max(0, Number(activeDetail.cumulativeProgress || 0) - progressThisWeek) : (targetVolume > 0 && volumeSdMggLalu > 0 ? (volumeSdMggLalu / targetVolume) * 100 : 0));
+
+        // Progres Kumulatif = Progres Minggu Sebelumnya + Progres Minggu Tersebut
+        const cumulativeVolume = volumeSdMggLalu + volumeThisWeek;
+        const cumulativeProgress = progressSdMggLalu + progressThisWeek;
 
         return {
           rabItemId: item.id,
@@ -433,11 +445,18 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
         for (const extra of extraItems) {
           const targetVol = Number(extra.targetVolume || 0);
           const vMggIni = Number(extra.volumeThisWeek || 0);
-          const vSdMggIni = Number(extra.cumulativeVolume || 0);
-          const vSdMggLalu = Math.max(0, vSdMggIni - vMggIni);
-          const pSdMggIni = Number(extra.cumulativeProgress || 0);
           const pMggIni = Number(extra.progressThisWeek || 0);
-          const pSdMggLalu = targetVol > 0 ? (vSdMggLalu / targetVol) * 100 : Math.max(0, pSdMggIni - pMggIni);
+
+          const vSdMggIniOld = Number(extra.cumulativeVolume || 0);
+          const pSdMggIniOld = Number(extra.cumulativeProgress || 0);
+
+          const vSdMggLalu = Math.max(0, vSdMggIniOld - vMggIni);
+          const pSdMggLalu = targetVol > 0 && vSdMggLalu > 0 
+            ? (vSdMggLalu / targetVol) * 100 
+            : Math.max(0, pSdMggIniOld - pMggIni);
+
+          const vSdMggIni = vSdMggLalu + vMggIni;
+          const pSdMggIni = pSdMggLalu + pMggIni;
 
           mappedRabItems.push({
             rabItemId: extra.rabItemId,
@@ -463,11 +482,18 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
       return activeReport.details.map(item => {
         const targetVol = Number(item.targetVolume || 0);
         const vMggIni = Number(item.volumeThisWeek || 0);
-        const vSdMggIni = Number(item.cumulativeVolume || 0);
-        const vSdMggLalu = Math.max(0, vSdMggIni - vMggIni);
-        const pSdMggIni = Number(item.cumulativeProgress || 0);
         const pMggIni = Number(item.progressThisWeek || 0);
-        const pSdMggLalu = targetVol > 0 ? (vSdMggLalu / targetVol) * 100 : Math.max(0, pSdMggIni - pMggIni);
+        
+        const vSdMggIniOld = Number(item.cumulativeVolume || 0);
+        const pSdMggIniOld = Number(item.cumulativeProgress || 0);
+        
+        const vSdMggLalu = Math.max(0, vSdMggIniOld - vMggIni);
+        const pSdMggLalu = targetVol > 0 && vSdMggLalu > 0 
+          ? (vSdMggLalu / targetVol) * 100 
+          : Math.max(0, pSdMggIniOld - pMggIni);
+
+        const vSdMggIni = vSdMggLalu + vMggIni;
+        const pSdMggIni = pSdMggLalu + pMggIni;
 
         return {
           rabItemId: item.rabItemId,
@@ -509,8 +535,7 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
     acc + ((Number(curr.progressSdMggLalu) || 0) * (Number(curr.weight) || 0)) / 100, 0);
   const detailsTotalProgWeightedIni = allReportDetails.reduce((acc, curr) => 
     acc + ((Number(curr.progressThisWeek) || 0) * (Number(curr.weight) || 0)) / 100, 0);
-  const detailsTotalProgWeightedSdIni = allReportDetails.reduce((acc, curr) => 
-    acc + ((Number(curr.cumulativeProgress) || 0) * (Number(curr.weight) || 0)) / 100, 0);
+  const detailsTotalProgWeightedSdIni = detailsTotalProgWeightedLalu + detailsTotalProgWeightedIni;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto">

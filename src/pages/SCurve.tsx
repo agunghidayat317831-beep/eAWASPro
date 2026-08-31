@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LineChart, 
   Line, 
@@ -106,9 +106,23 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
     ? Math.ceil(selectedProject.executionPeriod / 7) 
     : 5;
 
-  const chartData = Array.from({ length: Math.max(totalWeeks, reports.length) }, (_, i) => {
+  const computedReports = useMemo(() => {
+    const sorted = [...reports].sort((a, b) => a.weekNumber - b.weekNumber);
+    let runCum = 0;
+    return sorted.map(r => {
+      const weekly = Number(r.weeklyProgress) || 0;
+      runCum = parseFloat((runCum + weekly).toFixed(2));
+      return {
+        ...r,
+        weeklyProgress: weekly,
+        cumulativeProgress: runCum
+      };
+    });
+  }, [reports]);
+
+  const chartData = Array.from({ length: Math.max(totalWeeks, computedReports.length) }, (_, i) => {
     const weekNum = i + 1;
-    const actualReport = reports.find(r => r.weekNumber === weekNum);
+    const actualReport = computedReports.find(r => r.weekNumber === weekNum);
     
     // Determine planned progress using Sigmoid Progression Analysis
     // Formula: f(x) = x^n / (x^n + (1-x)^n) where x = t/N
@@ -132,7 +146,7 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
     };
   });
 
-  const lastActual = reports.length > 0 ? reports[reports.length - 1].cumulativeProgress : 0;
+  const lastActual = computedReports.length > 0 ? computedReports[computedReports.length - 1].cumulativeProgress : 0;
   
   // Find planned value for the current week (based on number of reports)
   const currentWeekIdx = reports.length > 0 ? reports.length - 1 : 0;
