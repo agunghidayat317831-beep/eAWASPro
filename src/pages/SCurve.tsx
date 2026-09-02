@@ -26,9 +26,17 @@ import {
   FileText,
   X,
   Copy,
-  Check
+  Check,
+  AlertTriangle,
+  Info,
+  ShieldAlert
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  getCriticalDeviationThreshold, 
+  isCriticalContract, 
+  evaluateContractStatus 
+} from '../utils/contractStatus';
 
 const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
   const navigate = useNavigate();
@@ -47,7 +55,10 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
     nomor: '',
     lampiran: '-',
     weekNum: 1,
+    rencana: '0',
+    realisasi: '0',
     deviasi: '0',
+    threshold: '0',
     date: new Date().toISOString().split('T')[0],
     ppkName: ''
   });
@@ -120,37 +131,60 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
     });
   }, [reports]);
 
-  const chartData = Array.from({ length: Math.max(totalWeeks, computedReports.length) }, (_, i) => {
-    const weekNum = i + 1;
-    const actualReport = computedReports.find(r => r.weekNumber === weekNum);
-    
-    // Determine planned progress using Sigmoid Progression Analysis
-    // Formula: f(x) = x^n / (x^n + (1-x)^n) where x = t/N
-    // This creates a smooth S-curve starting at 0% and ending at 100%
-    let plannedValue: number | null = null;
-    if (i < totalWeeks) {
-      const x = weekNum / totalWeeks;
-      const n = 3; // Steeping factor for S-curve
-      const sigmoid = Math.pow(x, n) / (Math.pow(x, n) + Math.pow(1 - x, n));
-      plannedValue = Number((sigmoid * 100).toFixed(2));
-    } else {
-      // Work beyond planned weeks should have a target of 100%
-      plannedValue = 100;
-    }
-    
-    return {
-      name: `Minggu ${weekNum}`,
-      rencana: plannedValue,
-      realisasi: actualReport ? actualReport.cumulativeProgress : null,
-      deviasi: actualReport && plannedValue ? (actualReport.cumulativeProgress - plannedValue).toFixed(2) : null
-    };
-  });
+  const maxTotalWeeks = Math.max(
+    totalWeeks, 
+    computedReports.length > 0 ? computedReports[computedReports.length - 1].weekNumber : 0
+  );
 
-  const lastActual = computedReports.length > 0 ? computedReports[computedReports.length - 1].cumulativeProgress : 0;
+  const chartData = useMemo(() => {
+    const data = [];
+    
+    // Minggu 0 (Titik Awal SPMK / Nol Proyek)
+    data.push({
+      name: 'Minggu 0',
+      weekNum: 0,
+      rencana: 0,
+      realisasi: 0,
+      deviasi: '0.00'
+    });
+
+    for (let i = 1; i <= maxTotalWeeks; i++) {
+      const weekNum = i;
+      const actualReport = computedReports.find(r => r.weekNumber === weekNum);
+      
+      // Determine planned progress using Sigmoid Progression Analysis
+      // Formula: f(x) = x^n / (x^n + (1-x)^n) where x = t/N
+      // This creates a smooth S-curve starting at 0% and ending at 100%
+      let plannedValue: number | null = null;
+      if (weekNum <= totalWeeks) {
+        const x = weekNum / totalWeeks;
+        const n = 3; // Steeping factor for S-curve
+        const sigmoid = Math.pow(x, n) / (Math.pow(x, n) + Math.pow(1 - x, n));
+        plannedValue = Number((sigmoid * 100).toFixed(2));
+      } else {
+        // Work beyond planned weeks should have a target of 100%
+        plannedValue = 100;
+      }
+      
+      data.push({
+        name: `Minggu ${weekNum}`,
+        weekNum: weekNum,
+        rencana: plannedValue,
+        realisasi: actualReport ? actualReport.cumulativeProgress : null,
+        deviasi: actualReport && plannedValue !== null ? (actualReport.cumulativeProgress - plannedValue).toFixed(2) : null
+      });
+    }
+
+    return data;
+  }, [maxTotalWeeks, totalWeeks, computedReports]);
+
+  const lastActualReport = computedReports.length > 0 ? computedReports[computedReports.length - 1] : null;
+  const lastActual = lastActualReport ? lastActualReport.cumulativeProgress : 0;
+  const currentWeekNumber = lastActualReport ? lastActualReport.weekNumber : 0;
   
-  // Find planned value for the current week (based on number of reports)
-  const currentWeekIdx = reports.length > 0 ? reports.length - 1 : 0;
-  const lastPlanned = chartData[currentWeekIdx]?.rencana || 0;
+  // Find planned value for the current active week
+  const currentPlanEntry = chartData.find(d => d.weekNum === currentWeekNumber);
+  const lastPlanned = currentPlanEntry?.rencana || 0;
   const deviation = (lastActual - lastPlanned).toFixed(2);
 
   const formatIndoDate = (dateString: string) => {
@@ -181,18 +215,25 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
     }));
   };
 
-  const openWarningModal = (weekNum: number, dev: string) => {
+  const openWarningModal = (weekNum: number, dev: string, rencanaVal?: number | null, realisasiVal?: number | null) => {
     if (!selectedProject) return;
     
     const devNum = Number(dev);
+    const renNum = rencanaVal !== undefined && rencanaVal !== null ? rencanaVal : (chartData.find(d => d.weekNum === weekNum)?.rencana || 0);
+    const realNum = realisasiVal !== undefined && realisasiVal !== null ? realisasiVal : (chartData.find(d => d.weekNum === weekNum)?.realisasi || 0);
+    const thresh = renNum > 0 ? getCriticalDeviationThreshold(renNum) : 0;
+
     let autoLevel = 'PERTAMA';
     let autoScm = 'I';
     
-    // Auto-detect warning level based on typical critical contracts path (e.g. deviation <= -5 is normal alert, <= -10 is level II, <= -15 is level III)
-    if (devNum <= -15) {
+    // Auto-detect warning level based on typical critical contracts progression:
+    // If deviasi is far worse than threshold:
+    // Level 3 if deviation <= threshold * 2 or <= -15%
+    // Level 2 if deviation <= threshold * 1.5 or <= -10%
+    if (devNum <= -15 || (thresh < 0 && devNum <= thresh * 2)) {
       autoLevel = 'KETIGA';
       autoScm = 'III';
-    } else if (devNum <= -10) {
+    } else if (devNum <= -10 || (thresh < 0 && devNum <= thresh * 1.5)) {
       autoLevel = 'KEDUA';
       autoScm = 'II';
     } else {
@@ -208,7 +249,10 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
       nomor: `.../SP-${autoScm}/PPK/${new Date().getFullYear()}`,
       lampiran: '-',
       weekNum,
+      rencana: renNum.toString(),
+      realisasi: realNum !== null ? realNum.toString() : '0',
       deviasi: dev,
+      threshold: thresh.toString(),
       date: new Date().toISOString().split('T')[0],
       ppkName: defaultPpk
     });
@@ -224,6 +268,12 @@ const SCurve: React.FC<{ user: UserProfile }> = ({ user }) => {
     const spLevelWord = warningConfig.level === 'PERTAMA' ? 'Pertama' : 
                         warningConfig.level === 'KEDUA' ? 'Kedua' : 'Ketiga';
 
+    const ren = Number(warningConfig.rencana) || 0;
+    const thresh = warningConfig.threshold || (ren > 0 ? getCriticalDeviationThreshold(ren).toString() : '0');
+    const ruleDetail = ren < 70
+      ? `* Untuk progres rencana < 70%, batas toleransi deviasi adalah -10% dari target rencana (${thresh}%).`
+      : `* Untuk progres rencana ≥ 70%, batas toleransi deviasi adalah -5% dari target rencana (${thresh}%).`;
+
     return `SURAT PERINGATAN ${warningConfig.level}
 
 Nomor: ${warningConfig.nomor}
@@ -234,10 +284,19 @@ di
     ${provider?.address || '[Alamat CV/PT]'}
 
 Dengan hormat,
-Berdasarkan catatan kemajuan pekerjaan yang Saudara/i laksanakan pada paket pekerjaan ${selectedProject.name} hingga periode Minggu ke-${warningConfig.weekNum} terdapat deviasi ${warningConfig.deviasi}% Sesuai Syarat-Sarat Umum Kontrak Bagian B.6 Pasal 43.1, 43.2 dan 43.3, maka pekerjaan Saudara Kami nyatakan sebagai Kontrak Kritis.
+Berdasarkan catatan kemajuan pekerjaan yang Saudara/i laksanakan pada paket pekerjaan ${selectedProject.name} hingga periode Minggu ke-${warningConfig.weekNum}, tercatat kondisi sebagai berikut:
+- Kemajuan Rencana : ${warningConfig.rencana}%
+- Kemajuan Realisasi : ${warningConfig.realisasi}%
+- Deviasi Realisasi : ${warningConfig.deviasi}% (Batas toleransi deviasi yang diizinkan: ${thresh}%)
+
+Sesuai Syarat-Syarat Umum Kontrak (SSUK) Bagian B.6 Pasal 43 Mengenai Kontrak Kritis:
+${ruleDetail}
+Mengingat deviasi pekerjaan Saudara telah melampaui batas toleransi tersebut (${warningConfig.deviasi}% ≤ ${thresh}%), maka pekerjaan Saudara Kami nyatakan sebagai KONTRAK KRITIS.
+
 Dengan demikian kami kirimkan surat ini sebagai Surat Peringatan ${spLevelWord} atas keterlambatan pekerjaan yang menjadi tanggung jawab Saudara.
 Selanjutnya, agar Saudara dapat mempersiapkan Program Percepatan/Action Plan (segala kebutuhan guna peningkatan pencapaian kemajuan pelaksanaan) yang akan dibahas pada Rapat Pembuktian (Show Cause Meeting/SCM) Tingkat ${warningConfig.scmLevel}.
-Demikian agar menjadi perhatiannya.
+
+Demikian agar menjadi perhatian dan segera ditindaklanjuti.
 
 Karawang, ${dateFormatted || '[Tanggal Bulan Tahun]'}
 KPA selaku Pejabat Pembuat Komitmen
@@ -280,8 +339,8 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
   };
 
-  const handleSendWarning = (weekNum: number, dev: string) => {
-    openWarningModal(weekNum, dev);
+  const handleSendWarning = (weekNum: number, dev: string, rencanaVal?: number | null, realisasiVal?: number | null) => {
+    openWarningModal(weekNum, dev, rencanaVal, realisasiVal);
   };
 
   return (
@@ -431,53 +490,106 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
             </div>
           </div>
 
-          {/* Data Table */}
+          {/* Data Table with SSUK Critical Contract Rule Indicator */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-4 sm:p-6 border-b border-gray-100">
-              <h3 className="text-base sm:text-lg font-bold text-gray-900">Detail Data Mingguan</h3>
+            <div className="p-4 sm:p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">Detail Data Mingguan &amp; Status Kontrak</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Evaluasi deviasi progres mingguan berdasarkan Syarat-Syarat Umum Kontrak (SSUK) Bagian B.6
+                </p>
+              </div>
+
+              {/* SSUK Rules Pill / Info */}
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl text-xs text-slate-600">
+                <ShieldAlert size={15} className="text-red-600 shrink-0" />
+                <span>
+                  <strong>Syarat SP:</strong> Rencana &lt; 70% (deviasi ≤ -10% rencana) | Rencana ≥ 70% (deviasi ≤ -5% rencana)
+                </span>
+              </div>
             </div>
+
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[600px]">
+              <table className="w-full text-left border-collapse min-w-[700px]">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600">Minggu</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-center">Rencana (%)</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-center">Realisasi (%)</th>
                     <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-center">Deviasi (%)</th>
-                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Status</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600 text-center">Toleransi Deviasi</th>
+                    <th className="px-6 py-4 text-sm font-semibold text-gray-600">Status Tindakan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {chartData.map((data, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-gray-900">{data.name}</td>
-                      <td className="px-6 py-4 text-center text-blue-600 font-semibold">{data.rencana || '-'}%</td>
-                      <td className="px-6 py-4 text-center text-emerald-600 font-semibold">{data.realisasi || '-'}%</td>
-                      <td className={`px-6 py-4 text-center font-bold ${Number(data.deviasi) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {data.deviasi ? (Number(data.deviasi) > 0 ? `+${data.deviasi}` : data.deviasi) : '-'}%
-                      </td>
-                      <td className="px-6 py-4">
-                        {data.realisasi && data.rencana ? (
-                          Number(data.deviasi) <= -5 ? (
-                            <button 
-                              onClick={() => handleSendWarning(idx + 1, data.deviasi || '0')}
-                              className="w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors shadow-sm cursor-pointer"
-                              title="Kirim Surat Peringatan Resmi"
-                            >
-                              <FileText size={12} className="text-red-600" />
-                              Surat Peringatan
-                            </button>
-                          ) : (
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              Number(data.deviasi) >= 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-                            }`}>
-                              {Number(data.deviasi) >= 0 ? 'On Track' : 'Terlambat'}
+                  {chartData.map((data, idx) => {
+                    const statusResult = evaluateContractStatus(
+                      data.weekNum,
+                      data.rencana,
+                      data.realisasi,
+                      data.deviasi !== null ? Number(data.deviasi) : null
+                    );
+
+                    return (
+                      <tr key={idx} className={`transition-colors ${statusResult.isCritical ? 'bg-red-50/30 hover:bg-red-50/60' : 'hover:bg-gray-50/50'}`}>
+                        <td className="px-6 py-4 font-medium text-gray-900">
+                          {data.name}
+                          {data.weekNum === 0 && (
+                            <span className="ml-2 text-xs font-normal text-slate-400">
+                              (Awal SPMK)
                             </span>
-                          )
-                        ) : '-'}
-                      </td>
-                    </tr>
-                  ))}
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center text-blue-600 font-semibold font-mono">
+                          {data.rencana !== null ? `${data.rencana}%` : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-center text-emerald-600 font-semibold font-mono">
+                          {data.realisasi !== null ? `${data.realisasi}%` : '-'}
+                        </td>
+                        <td className={`px-6 py-4 text-center font-bold font-mono ${data.deviasi !== null ? (Number(data.deviasi) >= 0 ? 'text-green-600' : 'text-red-600') : 'text-slate-400'}`}>
+                          {data.deviasi !== null ? (Number(data.deviasi) > 0 ? `+${data.deviasi}%` : `${data.deviasi}%`) : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-center font-mono text-xs text-slate-500">
+                          {data.weekNum === 0 ? (
+                            '0.00%'
+                          ) : data.rencana !== null ? (
+                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-medium" title={data.rencana < 70 ? '10% dari rencana (< 70%)' : '5% dari rencana (≥ 70%)'}>
+                              {getCriticalDeviationThreshold(data.rencana)}%
+                            </span>
+                          ) : '-'}
+                        </td>
+                        <td className="px-6 py-4">
+                          {data.weekNum === 0 ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                              Mulai Pelaksanaan
+                            </span>
+                          ) : data.realisasi !== null && data.rencana !== null ? (
+                            statusResult.isCritical ? (
+                              <button 
+                                onClick={() => handleSendWarning(data.weekNum, data.deviasi || '0', data.rencana, data.realisasi)}
+                                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 transition-colors shadow-sm cursor-pointer animate-pulse"
+                                title={`Kirim Surat Peringatan Resmi (Deviasi ${data.deviasi}% melampaui batas toleransi ${statusResult.threshold}%)`}
+                              >
+                                <AlertTriangle size={13} className="text-red-600" />
+                                Surat Peringatan
+                              </button>
+                            ) : (
+                              <span 
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  Number(data.deviasi) >= 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                                }`}
+                                title={Number(data.deviasi) < 0 ? `Deviasi ${data.deviasi}% masih dalam toleransi aman (${statusResult.threshold}%)` : 'Progres sesuai jadwal'}
+                              >
+                                {Number(data.deviasi) >= 0 ? 'On Track' : 'Terlambat Ringan'}
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">Belum Ada Laporan</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -496,7 +608,10 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <FileText className="text-red-500" size={24} />
-                    <h3 className="text-lg font-bold text-slate-900 font-sans">Format Surat Peringatan</h3>
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900 font-sans">Format Surat Peringatan</h3>
+                      <p className="text-xs text-slate-500 font-sans">Kontrak Kritis &amp; Rapat Pembuktian (SCM)</p>
+                    </div>
                   </div>
                   <button 
                     onClick={() => setIsWarningModalOpen(false)}
@@ -507,6 +622,22 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                 </div>
 
                 <div className="space-y-4 font-sans">
+                  {/* Info Ringkasan Kritis */}
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-800 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <AlertTriangle size={14} className="text-red-600" />
+                      Evaluasi Keterlambatan Minggu Ke-{warningConfig.weekNum}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                      <div>Rencana: <span className="font-bold text-blue-700">{warningConfig.rencana}%</span></div>
+                      <div>Realisasi: <span className="font-bold text-emerald-700">{warningConfig.realisasi}%</span></div>
+                      <div>Deviasi: <span className="font-bold text-red-700">{warningConfig.deviasi}%</span></div>
+                    </div>
+                    <div className="text-[11px] text-red-700 pt-0.5">
+                      Batas deviasi diizinkan: <strong>{warningConfig.threshold}%</strong> ({Number(warningConfig.rencana) < 70 ? '10% dari rencana' : '5% dari rencana'})
+                    </div>
+                  </div>
+
                   {/* SP Level Selector */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
@@ -579,7 +710,7 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                         type="text"
                         value={warningConfig.deviasi}
                         onChange={(e) => setWarningConfig(prev => ({ ...prev, deviasi: e.target.value }))}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-mono font-bold text-red-600"
                       />
                     </div>
                   </div>

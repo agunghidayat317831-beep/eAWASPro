@@ -24,6 +24,7 @@ import {
 import { Project, WeeklyReport, Provider, UserProfile, RABItem } from '../types';
 import jsPDF from 'jspdf';
 import { toJpeg } from 'html-to-image';
+import { isCriticalContract, getCriticalDeviationThreshold } from '../utils/contractStatus';
 
 interface WeeklyReportPDFModalProps {
   isOpen: boolean;
@@ -107,57 +108,76 @@ export const WeeklyReportPDFModal: React.FC<WeeklyReportPDFModalProps> = ({
     });
   }, [reports]);
 
-  // Compute S-curve planned vs actual data
-  const sCurveData = Array.from({ length: maxWeeksToDisplay }, (_, i) => {
-    const weekNum = i + 1;
-    const actualReport = computedReports.find(r => r.weekNumber === weekNum);
+  // Compute S-curve planned vs actual data starting from Minggu 0
+  const sCurveData = useMemo(() => {
+    const data = [];
 
-    let plannedCumulative = 100;
-    if (weekNum <= totalPlannedWeeks) {
-      const x = weekNum / totalPlannedWeeks;
-      const n = 3;
-      const sigmoid = Math.pow(x, n) / (Math.pow(x, n) + Math.pow(1 - x, n));
-      plannedCumulative = Number((sigmoid * 100).toFixed(2));
+    // Minggu 0 (Titik Awal SPMK)
+    data.push({
+      weekNum: 0,
+      startDate: project.spmkDate || project.contractDate || '',
+      endDate: project.spmkDate || project.contractDate || '',
+      plannedWeekly: 0,
+      actualWeekly: 0,
+      plannedCumulative: 0,
+      actualCumulative: 0,
+      deviation: 0,
+      report: undefined
+    });
+
+    for (let i = 0; i < maxWeeksToDisplay; i++) {
+      const weekNum = i + 1;
+      const actualReport = computedReports.find(r => r.weekNumber === weekNum);
+
+      let plannedCumulative = 100;
+      if (weekNum <= totalPlannedWeeks) {
+        const x = weekNum / totalPlannedWeeks;
+        const n = 3;
+        const sigmoid = Math.pow(x, n) / (Math.pow(x, n) + Math.pow(1 - x, n));
+        plannedCumulative = Number((sigmoid * 100).toFixed(2));
+      }
+
+      const prevPlannedCumulative = i === 0 ? 0 : (() => {
+        const prevX = i / totalPlannedWeeks;
+        const n = 3;
+        const prevSigmoid = Math.pow(prevX, n) / (Math.pow(prevX, n) + Math.pow(1 - prevX, n));
+        return i <= totalPlannedWeeks ? Number((prevSigmoid * 100).toFixed(2)) : 100;
+      })();
+
+      const plannedWeekly = Number((plannedCumulative - prevPlannedCumulative).toFixed(2));
+
+      const actualCumulative = actualReport ? actualReport.cumulativeProgress : null;
+      const actualWeekly = actualReport ? actualReport.weeklyProgress : null;
+      const deviation = (actualCumulative !== null) ? Number((actualCumulative - plannedCumulative).toFixed(2)) : null;
+
+      let startDate = actualReport?.startDate || '';
+      let endDate = actualReport?.endDate || '';
+
+      // If no report date, extrapolate from SPMK
+      if (!startDate && project.spmkDate) {
+        const start = new Date(project.spmkDate);
+        start.setDate(start.getDate() + (i * 7));
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        startDate = start.toISOString().split('T')[0];
+        endDate = end.toISOString().split('T')[0];
+      }
+
+      data.push({
+        weekNum,
+        startDate,
+        endDate,
+        plannedWeekly,
+        actualWeekly,
+        plannedCumulative,
+        actualCumulative,
+        deviation,
+        report: actualReport
+      });
     }
 
-    const prevPlannedCumulative = i === 0 ? 0 : (() => {
-      const prevX = i / totalPlannedWeeks;
-      const n = 3;
-      const prevSigmoid = Math.pow(prevX, n) / (Math.pow(prevX, n) + Math.pow(1 - prevX, n));
-      return i <= totalPlannedWeeks ? Number((prevSigmoid * 100).toFixed(2)) : 100;
-    })();
-
-    const plannedWeekly = Number((plannedCumulative - prevPlannedCumulative).toFixed(2));
-
-    const actualCumulative = actualReport ? actualReport.cumulativeProgress : null;
-    const actualWeekly = actualReport ? actualReport.weeklyProgress : null;
-    const deviation = (actualCumulative !== null) ? Number((actualCumulative - plannedCumulative).toFixed(2)) : null;
-
-    let startDate = actualReport?.startDate || '';
-    let endDate = actualReport?.endDate || '';
-
-    // If no report date, extrapolate from SPMK
-    if (!startDate && project.spmkDate) {
-      const start = new Date(project.spmkDate);
-      start.setDate(start.getDate() + (i * 7));
-      const end = new Date(start);
-      end.setDate(end.getDate() + 6);
-      startDate = start.toISOString().split('T')[0];
-      endDate = end.toISOString().split('T')[0];
-    }
-
-    return {
-      weekNum,
-      startDate,
-      endDate,
-      plannedWeekly,
-      actualWeekly,
-      plannedCumulative,
-      actualCumulative,
-      deviation,
-      report: actualReport
-    };
-  });
+    return data;
+  }, [maxWeeksToDisplay, totalPlannedWeeks, computedReports, project]);
 
   const sortedReports = computedReports;
   const latestReport = sortedReports.length > 0 ? sortedReports[sortedReports.length - 1] : null;
@@ -337,7 +357,7 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
   const graphHeight = svgHeight - padding.top - padding.bottom;
 
   // S-Curve calculations: Target plan is ALWAYS FULL (all project weeks), while Actual curve stops at selected week
-  const totalWeeksCount = Math.max(1, sCurveData.length);
+  const totalWeeksCount = Math.max(1, maxWeeksToDisplay);
 
   // Scale functions (W-0 at padding.left to W-Total at right)
   const xScale = (week: number) => {
@@ -349,15 +369,12 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
   };
 
   // Build SVG path for Target Rencana (FULL from W-0 = 0% to W-End = 100%)
-  const planPoints = [
-    { x: xScale(0), y: yScale(0), val: 0, week: 0 },
-    ...sCurveData.map(d => ({
-      x: xScale(d.weekNum),
-      y: yScale(d.plannedCumulative),
-      val: d.plannedCumulative,
-      week: d.weekNum
-    }))
-  ];
+  const planPoints = sCurveData.map(d => ({
+    x: xScale(d.weekNum),
+    y: yScale(d.plannedCumulative),
+    val: d.plannedCumulative,
+    week: d.weekNum
+  }));
 
   const planPathD = planPoints.reduce((acc, pt, idx) => {
     return idx === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`;
@@ -366,15 +383,12 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
   // Build SVG path for Realisasi Lapangan (only up to selected week / available actual data)
   const maxActualWeek = selectedWeek === 'all' ? totalWeeksCount : currentWeekNum;
   const actualReportsInScope = sCurveData.filter(d => d.weekNum <= maxActualWeek && d.actualCumulative !== null);
-  const actualPoints = [
-    { x: xScale(0), y: yScale(0), val: 0, week: 0 },
-    ...actualReportsInScope.map(d => ({
-      x: xScale(d.weekNum),
-      y: yScale(d.actualCumulative!),
-      val: d.actualCumulative!,
-      week: d.weekNum
-    }))
-  ];
+  const actualPoints = actualReportsInScope.map(d => ({
+    x: xScale(d.weekNum),
+    y: yScale(d.actualCumulative!),
+    val: d.actualCumulative!,
+    week: d.weekNum
+  }));
 
   const actualPathD = actualPoints.length > 1 ? actualPoints.reduce((acc, pt, idx) => {
     return idx === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`;
@@ -877,31 +891,10 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
                           );
                         })}
 
-                        {/* Baseline Grid Line for W-0 (Awal Proyek) */}
-                        <g key="w-0">
-                          <line 
-                            x1={xScale(0)} 
-                            y1={padding.top} 
-                            x2={xScale(0)} 
-                            y2={svgHeight - padding.bottom} 
-                            stroke="#cbd5e1" 
-                            strokeWidth="1.5"
-                          />
-                          <text 
-                            x={xScale(0)} 
-                            y={svgHeight - padding.bottom + 16} 
-                            textAnchor="middle" 
-                            fontSize="9" 
-                            fill="#64748b"
-                            fontWeight="bold"
-                          >
-                            W-0
-                          </text>
-                        </g>
-
-                        {/* Vertical Grid Lines for All Project Weeks */}
+                        {/* Vertical Grid Lines for All Project Weeks (Starting from W-0) */}
                         {sCurveData.map(d => {
                           const x = xScale(d.weekNum);
+                          const isZero = d.weekNum === 0;
                           return (
                             <g key={d.weekNum}>
                               <line 
@@ -909,15 +902,15 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
                                 y1={padding.top} 
                                 x2={x} 
                                 y2={svgHeight - padding.bottom} 
-                                stroke="#f1f5f9" 
-                                strokeWidth="1"
+                                stroke={isZero ? "#cbd5e1" : "#f1f5f9"} 
+                                strokeWidth={isZero ? "1.5" : "1"} 
                               />
                               <text 
                                 x={x} 
                                 y={svgHeight - padding.bottom + 16} 
                                 textAnchor="middle" 
-                                fontSize="9.5" 
-                                fill="#334155"
+                                fontSize={isZero ? "9" : "9.5"} 
+                                fill={isZero ? "#64748b" : "#334155"} 
                                 fontWeight="bold"
                               >
                                 W-{d.weekNum}
@@ -1054,7 +1047,9 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
                                 W-{d.weekNum}
                               </td>
                               <td className="px-1.5 py-1 border-r border-slate-300 text-center text-[9px]">
-                                {d.startDate && d.endDate ? (
+                                {d.weekNum === 0 ? (
+                                  d.startDate ? new Date(d.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Awal Proyek'
+                                ) : d.startDate && d.endDate ? (
                                   `${new Date(d.startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${new Date(d.endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
                                 ) : '-'}
                               </td>
@@ -1078,10 +1073,12 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
                                 ) : '-'}
                               </td>
                               <td className="px-1.5 py-1 text-[9px]">
-                                {d.deviation !== null ? (
+                                {d.weekNum === 0 ? (
+                                  <span className="text-slate-600 font-medium">Mulai Pelaksanaan (SPMK)</span>
+                                ) : d.deviation !== null ? (
                                   d.deviation >= 0 ? (
                                     <span className="text-green-700 font-medium">Sesuai Jadwal</span>
-                                  ) : d.deviation >= -5 ? (
+                                  ) : !isCriticalContract(d.plannedCumulative, d.deviation) ? (
                                     <span className="text-amber-700 font-medium">Terlambat Ringan</span>
                                   ) : (
                                     <span className="text-red-700 font-bold">Kritis ({d.report?.notes || 'Perlu SCM'})</span>

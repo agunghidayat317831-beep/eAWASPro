@@ -16,7 +16,9 @@ import {
   Copy,
   Check,
   Printer,
-  Download
+  Download,
+  ShieldAlert,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   getProjects, 
@@ -32,6 +34,11 @@ import { Project, WeeklyReport as WeeklyReportType, Provider, UserProfile, RABIt
 import { motion, AnimatePresence } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { WeeklyReportPDFModal } from '../components/WeeklyReportPDFModal';
+import { 
+  getCriticalDeviationThreshold, 
+  isCriticalContract, 
+  evaluateContractStatus 
+} from '../utils/contractStatus';
 
 interface WeeklyReportProps {
   user: UserProfile | null;
@@ -84,7 +91,10 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
     nomor: '',
     lampiran: '-',
     weekNum: 1,
+    rencana: '0',
+    realisasi: '0',
     deviasi: '0',
+    threshold: '0',
     date: new Date().toISOString().split('T')[0],
     ppkName: ''
   });
@@ -503,17 +513,21 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
     }));
   };
 
-  const openWarningModal = (weekNum: number, dev: string) => {
+  const openWarningModal = (weekNum: number, dev: string, planVal?: number, actualVal?: number) => {
     if (!selectedProject) return;
     
     const devNum = Number(dev);
+    const planProgress = planVal !== undefined ? planVal : getPlannedProgressForWeek(weekNum);
+    const actualProgress = actualVal !== undefined ? actualVal : (reports.find(r => r.weekNumber === weekNum)?.cumulativeProgress || 0);
+    const thresh = planProgress > 0 ? getCriticalDeviationThreshold(planProgress) : 0;
+
     let autoLevel = 'PERTAMA';
     let autoScm = 'I';
     
-    if (devNum <= -15) {
+    if (devNum <= -15 || (thresh < 0 && devNum <= thresh * 2)) {
       autoLevel = 'KETIGA';
       autoScm = 'III';
-    } else if (devNum <= -10) {
+    } else if (devNum <= -10 || (thresh < 0 && devNum <= thresh * 1.5)) {
       autoLevel = 'KEDUA';
       autoScm = 'II';
     } else {
@@ -529,7 +543,10 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
       nomor: `.../SP-${autoScm}/PPK/${new Date().getFullYear()}`,
       lampiran: '-',
       weekNum,
+      rencana: planProgress.toString(),
+      realisasi: actualProgress.toString(),
       deviasi: dev,
+      threshold: thresh.toString(),
       date: new Date().toISOString().split('T')[0],
       ppkName: defaultPpk
     });
@@ -545,6 +562,12 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
     const spLevelWord = warningConfig.level === 'PERTAMA' ? 'Pertama' : 
                         warningConfig.level === 'KEDUA' ? 'Kedua' : 'Ketiga';
 
+    const ren = Number(warningConfig.rencana) || 0;
+    const thresh = warningConfig.threshold || (ren > 0 ? getCriticalDeviationThreshold(ren).toString() : '0');
+    const ruleDetail = ren < 70
+      ? `* Untuk progres rencana < 70%, batas toleransi deviasi adalah -10% dari target rencana (${thresh}%).`
+      : `* Untuk progres rencana ≥ 70%, batas toleransi deviasi adalah -5% dari target rencana (${thresh}%).`;
+
     return `SURAT PERINGATAN ${warningConfig.level}
 
 Nomor: ${warningConfig.nomor}
@@ -555,10 +578,19 @@ di
     ${provider?.address || '[Alamat CV/PT]'}
 
 Dengan hormat,
-Berdasarkan catatan kemajuan pekerjaan yang Saudara/i laksanakan pada paket pekerjaan ${selectedProject.name} hingga periode Minggu ke-${warningConfig.weekNum} terdapat deviasi ${warningConfig.deviasi}% Sesuai Syarat-Sarat Umum Kontrak Bagian B.6 Pasal 43.1, 43.2 dan 43.3, maka pekerjaan Saudara Kami nyatakan sebagai Kontrak Kritis.
+Berdasarkan catatan kemajuan pekerjaan yang Saudara/i laksanakan pada paket pekerjaan ${selectedProject.name} hingga periode Minggu ke-${warningConfig.weekNum}, tercatat kondisi sebagai berikut:
+- Kemajuan Rencana : ${warningConfig.rencana}%
+- Kemajuan Realisasi : ${warningConfig.realisasi}%
+- Deviasi Realisasi : ${warningConfig.deviasi}% (Batas toleransi deviasi yang diizinkan: ${thresh}%)
+
+Sesuai Syarat-Syarat Umum Kontrak (SSUK) Bagian B.6 Pasal 43 Mengenai Kontrak Kritis:
+${ruleDetail}
+Mengingat deviasi pekerjaan Saudara telah melampaui batas toleransi tersebut (${warningConfig.deviasi}% ≤ ${thresh}%), maka pekerjaan Saudara Kami nyatakan sebagai KONTRAK KRITIS.
+
 Dengan demikian kami kirimkan surat ini sebagai Surat Peringatan ${spLevelWord} atas keterlambatan pekerjaan yang menjadi tanggung jawab Saudara.
 Selanjutnya, agar Saudara dapat mempersiapkan Program Percepatan/Action Plan (segala kebutuhan guna peningkatan pencapaian kemajuan pelaksanaan) yang akan dibahas pada Rapat Pembuktian (Show Cause Meeting/SCM) Tingkat ${warningConfig.scmLevel}.
-Demikian agar menjadi perhatiannya.
+
+Demikian agar menjadi perhatian dan segera ditindaklanjuti.
 
 Karawang, ${dateFormatted || '[Tanggal Bulan Tahun]'}
 KPA selaku Pejabat Pembuat Komitmen
@@ -601,8 +633,8 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
   };
 
-  const handleSendWarning = (weekNum: number, dev: string) => {
-    openWarningModal(weekNum, dev);
+  const handleSendWarning = (weekNum: number, dev: string, planVal?: number, actualVal?: number) => {
+    openWarningModal(weekNum, dev, planVal, actualVal);
   };
 
   return (
@@ -805,22 +837,27 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                         {(() => {
                           const plan = getPlannedProgressForWeek(report.weekNumber);
                           const dev = report.cumulativeProgress - plan;
+                          const isCritical = isCriticalContract(plan, dev);
+                          const thresh = getCriticalDeviationThreshold(plan);
                           
-                          if (dev <= -5) {
+                          if (isCritical) {
                             return (
                               <button 
-                                onClick={() => handleSendWarning(report.weekNumber, dev.toFixed(2))}
-                                className="w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors shadow-sm cursor-pointer"
-                                title="Kirim Surat Peringatan Resmi"
+                                onClick={() => handleSendWarning(report.weekNumber, dev.toFixed(2), plan, report.cumulativeProgress)}
+                                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-300 hover:bg-red-200 transition-colors shadow-sm cursor-pointer animate-pulse"
+                                title={`Kirim Surat Peringatan Resmi (Deviasi ${dev.toFixed(2)}% melampaui toleransi ${thresh}%)`}
                               >
-                                <FileText size={12} className="text-red-600" />
+                                <AlertTriangle size={13} className="text-red-600" />
                                 Surat Peringatan
                               </button>
                             );
                           } else if (dev < 0) {
                             return (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
-                                Terlambat
+                              <span 
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700"
+                                title={`Deviasi ${dev.toFixed(2)}% masih dalam batas toleransi aman (${thresh}%)`}
+                              >
+                                Terlambat Ringan
                               </span>
                             );
                           } else {
@@ -1214,7 +1251,10 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <FileText className="text-red-500" size={24} />
-                    <h3 className="text-lg font-bold text-slate-900 font-sans">Format Surat Peringatan</h3>
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900 font-sans">Format Surat Peringatan</h3>
+                      <p className="text-xs text-slate-500 font-sans">Kontrak Kritis &amp; Rapat Pembuktian (SCM)</p>
+                    </div>
                   </div>
                   <button 
                     onClick={() => setIsWarningModalOpen(false)}
@@ -1225,6 +1265,22 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                 </div>
 
                 <div className="space-y-4 font-sans">
+                  {/* Info Ringkasan Kritis */}
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-800 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <AlertTriangle size={14} className="text-red-600" />
+                      Evaluasi Keterlambatan Minggu Ke-{warningConfig.weekNum}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                      <div>Rencana: <span className="font-bold text-blue-700">{warningConfig.rencana}%</span></div>
+                      <div>Realisasi: <span className="font-bold text-emerald-700">{warningConfig.realisasi}%</span></div>
+                      <div>Deviasi: <span className="font-bold text-red-700">{warningConfig.deviasi}%</span></div>
+                    </div>
+                    <div className="text-[11px] text-red-700 pt-0.5">
+                      Batas deviasi diizinkan: <strong>{warningConfig.threshold}%</strong> ({Number(warningConfig.rencana) < 70 ? '10% dari rencana' : '5% dari rencana'})
+                    </div>
+                  </div>
+
                   {/* SP Level Selector */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
@@ -1297,7 +1353,7 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                         type="text"
                         value={warningConfig.deviasi}
                         onChange={(e) => setWarningConfig(prev => ({ ...prev, deviasi: e.target.value }))}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-mono font-bold text-red-600"
                       />
                     </div>
                   </div>
