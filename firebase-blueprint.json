@@ -177,6 +177,25 @@
         "totalPrice": { "type": "number" }
       },
       "required": ["ahspId", "description", "volume", "unit", "unitPrice", "totalPrice"]
+    },
+    "TechnicalSpec": {
+      "title": "Spesifikasi Teknis & Tata Cara Pemeriksaan",
+      "description": "Technical specifications and inspection procedures for field supervisors",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string", "description": "ID Proyek terkait (opsional jika umum)" },
+        "projectName": { "type": "string", "description": "Nama Proyek" },
+        "specType": { "type": "string", "description": "Jenis Spesifikasi Teknis" },
+        "inspectionProcedure": { "type": "string", "description": "Tata Cara Pemeriksaan oleh Pengawas" },
+        "category": { "type": "string", "description": "Kategori bidang pekerjaan" },
+        "standardReference": { "type": "string", "description": "Standar Acuan SNI / Permen PUPR" },
+        "acceptanceCriteria": { "type": "string", "description": "Kriteria Penerimaan & Toleransi" },
+        "criticalPoints": { "type": "string", "description": "Titik Kritis Pengawasan" },
+        "inspectionTools": { "type": "string", "description": "Peralatan & Metode Uji" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["specType", "inspectionProcedure"]
     }
   },
   "firestore": {
@@ -223,6 +242,10 @@
     "/equipment_masters/{equipmentId}": {
       "schema": "EquipmentMaster",
       "description": "Master data for equipment components"
+    },
+    "/technical_specs/{specId}": {
+      "schema": "TechnicalSpec",
+      "description": "Technical specifications and field supervisor inspection guidelines"
     }
   }
 }

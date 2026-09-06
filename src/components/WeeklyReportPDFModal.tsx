@@ -447,7 +447,8 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
           volumeThisWeek,
           progressThisWeek,
           cumulativeVolume,
-          cumulativeProgress
+          cumulativeProgress,
+          technicalSpecName: activeDetail?.technicalSpecName || item.technicalSpecName || ''
         };
       });
 
@@ -483,7 +484,8 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
             volumeThisWeek: vMggIni,
             progressThisWeek: pMggIni,
             cumulativeVolume: vSdMggIni,
-            cumulativeProgress: pSdMggIni
+            cumulativeProgress: pSdMggIni,
+            technicalSpecName: extra.technicalSpecName || ''
           });
         }
       }
@@ -520,7 +522,8 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
           volumeThisWeek: vMggIni,
           progressThisWeek: pMggIni,
           cumulativeVolume: vSdMggIni,
-          cumulativeProgress: pSdMggIni
+          cumulativeProgress: pSdMggIni,
+          technicalSpecName: item.technicalSpecName || ''
         };
       });
     }
@@ -1180,7 +1183,14 @@ Laporan ini dibuat dan dicetak secara resmi melalui sistem e-AWAS Pro.`;
                                     <td className="px-1.5 py-1 text-center font-medium border-r border-slate-300 text-slate-600">
                                       {globalItemIndex}
                                     </td>
-                                    <td className="px-2 py-1 font-medium text-slate-900 border-r border-slate-300">{item.description}</td>
+                                    <td className="px-2 py-1 font-medium text-slate-900 border-r border-slate-300">
+                                      <div>{item.description}</div>
+                                      {item.technicalSpecName && (
+                                        <div className="text-[8px] text-indigo-700 font-bold mt-0.5">
+                                          Spek: {item.technicalSpecName}
+                                        </div>
+                                      )}
+                                    </td>
                                     <td className="px-1 py-1 text-center border-r border-slate-300 text-slate-600">{item.unit}</td>
                                     <td className="px-1.5 py-1 text-right border-r border-slate-300 font-mono text-slate-700">{item.targetVolume.toFixed(2)}</td>
                                     <td className="px-1.5 py-1 text-right border-r border-slate-300 font-mono text-slate-700">{item.weight.toFixed(3)}%</td>

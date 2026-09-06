@@ -14,11 +14,12 @@ import {
   Settings,
   Upload,
   Download,
-  AlertCircle
+  AlertCircle,
+  FileCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
-import { Project, RABItem, AHSP, UserProfile } from '../types';
+import { Project, RABItem, AHSP, UserProfile, TechnicalSpec } from '../types';
 import { 
   getProjects, 
   getAHSPs, 
@@ -27,7 +28,8 @@ import {
   updateRABItem, 
   deleteRABItem,
   addRABItemsBulk,
-  deleteAllRABItems
+  deleteAllRABItems,
+  getTechnicalSpecs
 } from '../services/firestore';
 
 interface RABPageProps {
@@ -39,17 +41,20 @@ const EmptyItem: Omit<RABItem, 'id'> = {
   volume: 0,
   unit: '',
   unitPrice: 0,
-  totalPrice: 0
+  totalPrice: 0,
+  technicalSpecId: '',
+  technicalSpecName: ''
 };
 
 interface RABItemFormProps {
   item: Omit<RABItem, 'id'> | RABItem;
   ahsps: AHSP[];
+  technicalSpecs: TechnicalSpec[];
   onSave: (data: Omit<RABItem, 'id'>) => void;
   onCancel: () => void;
 }
 
-const RABItemForm: React.FC<RABItemFormProps> = ({ item, ahsps, onSave, onCancel }) => {
+const RABItemForm: React.FC<RABItemFormProps> = ({ item, ahsps, technicalSpecs, onSave, onCancel }) => {
   const [formData, setFormData] = useState(item);
   const [searchTerm, setSearchTerm] = useState(item.description || '');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -81,16 +86,21 @@ const RABItemForm: React.FC<RABItemFormProps> = ({ item, ahsps, onSave, onCancel
     }));
   }, [formData.volume, formData.unitPrice]);
 
+  const selectedSpec = useMemo(() => {
+    if (!formData.technicalSpecId) return null;
+    return technicalSpecs.find(s => s.id === formData.technicalSpecId);
+  }, [formData.technicalSpecId, technicalSpecs]);
+
   return (
-    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 mt-4 space-y-4">
+    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 mt-4 space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2 relative">
+        <div className="space-y-2 relative md:col-span-2">
           <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Uraian Pekerjaan</label>
           <div className="relative">
             <input 
               type="text"
               placeholder="Ketik uraian atau cari Analisa..."
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none pr-10"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none pr-10 bg-white"
               value={searchTerm}
               onChange={(e) => {
                 const val = e.target.value;
@@ -130,13 +140,90 @@ const RABItemForm: React.FC<RABItemFormProps> = ({ item, ahsps, onSave, onCancel
           </div>
         </div>
 
+        {/* Input Spesifikasi Teknis (Opsional / Dropdown List) */}
+        <div className="space-y-2 md:col-span-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <FileCheck size={15} className="text-indigo-600" />
+              Spesifikasi Teknis (Opsional / Tidak Wajib)
+            </label>
+            {formData.technicalSpecId && (
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, technicalSpecId: '', technicalSpecName: '' })}
+                className="text-[11px] font-bold text-rose-500 hover:text-rose-700 transition-colors"
+              >
+                Hapus Pilihan Spesifikasi
+              </button>
+            )}
+          </div>
+          <select
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none bg-white text-sm font-medium text-slate-800"
+            value={formData.technicalSpecId || ''}
+            onChange={(e) => {
+              const specId = e.target.value;
+              if (!specId) {
+                setFormData({ ...formData, technicalSpecId: '', technicalSpecName: '' });
+              } else {
+                const spec = technicalSpecs.find(s => s.id === specId);
+                setFormData({
+                  ...formData,
+                  technicalSpecId: specId,
+                  technicalSpecName: spec ? spec.specType : ''
+                });
+              }
+            }}
+          >
+            <option value="">-- Tanpa Spesifikasi Teknis (Bisa Dikosongkan) --</option>
+            {technicalSpecs.map(spec => (
+              <option key={spec.id} value={spec.id}>
+                {spec.category ? `[${spec.category}] ` : ''}{spec.specType}
+              </option>
+            ))}
+          </select>
+
+          {selectedSpec && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-indigo-50/90 border border-indigo-200/90 rounded-2xl p-4 text-xs space-y-2 mt-2 shadow-sm"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 text-indigo-950 font-bold">
+                <span className="flex items-center gap-1.5 text-indigo-800">
+                  <FileCheck size={16} className="text-indigo-600" />
+                  Spesifikasi: {selectedSpec.specType}
+                </span>
+                {selectedSpec.category && (
+                  <span className="text-[10px] uppercase font-black bg-indigo-200/70 text-indigo-900 px-2.5 py-0.5 rounded-full">
+                    {selectedSpec.category}
+                  </span>
+                )}
+              </div>
+              {selectedSpec.standardReference && (
+                <p className="text-slate-600 text-[11px]">
+                  <strong className="text-slate-700 font-semibold">Standar Acuan:</strong> {selectedSpec.standardReference}
+                </p>
+              )}
+              {selectedSpec.criticalPoints && (
+                <p className="text-slate-600 text-[11px] line-clamp-2">
+                  <strong className="text-slate-700 font-semibold">Titik Kritis:</strong> {selectedSpec.criticalPoints.replace(/\n/g, '; ')}
+                </p>
+              )}
+              <div className="text-indigo-900 text-[11px] font-medium bg-white/90 p-2.5 rounded-xl border border-indigo-100 flex items-center gap-2 mt-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                <span>Pada <strong>Laporan Mingguan</strong> saat memilih pekerjaan ini, pengawas dapat mengunggah <strong>Foto Hasil Pemeriksaan Teknis Lapangan</strong> sesuai panduan SOP.</span>
+              </div>
+            </motion.div>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Volume</label>
             <input 
               type="number"
               step="0.01"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-mono"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-mono bg-white"
               value={formData.volume}
               onChange={(e) => setFormData({...formData, volume: parseFloat(e.target.value) || 0})}
             />
@@ -146,7 +233,7 @@ const RABItemForm: React.FC<RABItemFormProps> = ({ item, ahsps, onSave, onCancel
             <input 
               type="text"
               placeholder="e.g. m3, m2, ls"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
               value={formData.unit}
               onChange={(e) => setFormData({...formData, unit: e.target.value})}
             />
@@ -157,17 +244,17 @@ const RABItemForm: React.FC<RABItemFormProps> = ({ item, ahsps, onSave, onCancel
           <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Harga Satuan (Rp) - Penawaran</label>
           <input 
             type="number"
-            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-mono"
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-mono bg-white"
             value={formData.unitPrice || 0}
             onChange={(e) => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
           />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 md:col-span-2">
           <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Jumlah Harga (Rp)</label>
           <input 
             type="number"
-            className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed outline-none font-mono"
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed outline-none font-mono font-bold"
             value={formData.totalPrice}
             readOnly
           />
@@ -255,6 +342,7 @@ export default function RAB({ user }: RABPageProps) {
   const location = useLocation();
   const [projects, setProjects] = useState<Project[]>([]);
   const [ahsps, setAHSPs] = useState<AHSP[]>([]);
+  const [technicalSpecs, setTechnicalSpecs] = useState<TechnicalSpec[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [rabItems, setRabItems] = useState<RABItem[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -274,14 +362,16 @@ export default function RAB({ user }: RABPageProps) {
         'Uraian Pekerjaan': 'Galian Tanah Biasa Sedalam 1 m',
         'Volume': 10,
         'Satuan': 'm3',
-        'Harga Satuan': 75000
+        'Harga Satuan': 75000,
+        'Spesifikasi Teknis': 'Pekerjaan Galian Tanah & Pondasi Batu Belah'
       },
       {
         'Kode Analisa': '',
         'Uraian Pekerjaan': 'Pekerjaan Persiapan Lainnya',
         'Volume': 1,
         'Satuan': 'ls',
-        'Harga Satuan': 5000000
+        'Harga Satuan': 5000000,
+        'Spesifikasi Teknis': ''
       }
     ];
 
@@ -323,6 +413,7 @@ export default function RAB({ user }: RABPageProps) {
           const volume = parseFloat(row['Volume']) || 0;
           const unit = row['Satuan']?.toString().trim() || 'bh';
           const priceInput = parseFloat(row['Harga Satuan']);
+          const specInput = row['Spesifikasi Teknis']?.toString().trim();
 
           if (!code && !descInput) {
             skipCount++;
@@ -341,12 +432,32 @@ export default function RAB({ user }: RABPageProps) {
             unitPrice = ahsp.roundedPrice;
           }
 
+          // Match technical spec if provided
+          let technicalSpecId: string | undefined = undefined;
+          let technicalSpecName: string | undefined = undefined;
+
+          if (specInput) {
+            const matchedSpec = technicalSpecs.find(s => 
+              s.specType.toLowerCase() === specInput.toLowerCase() ||
+              specInput.toLowerCase().includes(s.specType.toLowerCase()) ||
+              s.specType.toLowerCase().includes(specInput.toLowerCase())
+            );
+            if (matchedSpec) {
+              technicalSpecId = matchedSpec.id;
+              technicalSpecName = matchedSpec.specType;
+            } else {
+              technicalSpecName = specInput;
+            }
+          }
+
           const itemToSave: Omit<RABItem, 'id'> = {
             description: descInput || ahsp?.jobName || 'Tanpa Keterangan',
             volume,
             unit,
             unitPrice: unitPrice,
-            totalPrice: volume * unitPrice
+            totalPrice: volume * unitPrice,
+            ...(technicalSpecId ? { technicalSpecId } : {}),
+            ...(technicalSpecName ? { technicalSpecName } : {})
           };
 
           if (ahsp?.id) {
@@ -440,9 +551,15 @@ export default function RAB({ user }: RABPageProps) {
   useEffect(() => {
     if (selectedProject) {
       const unsubRAB = getRABItems(selectedProject.id, setRabItems);
-      return () => unsubRAB();
+      const unsubSpecs = getTechnicalSpecs(setTechnicalSpecs, selectedProject.id);
+      return () => {
+        unsubRAB();
+        unsubSpecs();
+      };
     } else {
       setRabItems([]);
+      const unsubSpecs = getTechnicalSpecs(setTechnicalSpecs);
+      return () => unsubSpecs();
     }
   }, [selectedProject]);
 
@@ -624,6 +741,7 @@ export default function RAB({ user }: RABPageProps) {
               key={`${formResetKey}-${editingItem?.id || 'new'}`}
               item={editingItem || EmptyItem} 
               ahsps={ahsps}
+              technicalSpecs={technicalSpecs}
               onCancel={() => {
                 setIsFormOpen(false);
                 setEditingItem(null);
@@ -668,7 +786,15 @@ export default function RAB({ user }: RABPageProps) {
                   <td className="px-6 py-4 text-xs font-bold text-slate-400">{idx + 1}</td>
                   <td className="px-6 py-4">
                     <p className="text-sm font-bold text-slate-900">{item.description}</p>
-                    <p className="text-[10px] text-slate-400 font-medium">Analisa: {ahsps.find(a => a.id === item.ahspId)?.code || 'N/A'}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span className="text-[10px] text-slate-400 font-medium">Analisa: {ahsps.find(a => a.id === item.ahspId)?.code || 'N/A'}</span>
+                      {item.technicalSpecName && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full" title={`Spesifikasi Teknis: ${item.technicalSpecName}`}>
+                          <FileCheck size={11} className="text-indigo-600" />
+                          {item.technicalSpecName}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-center text-sm font-mono text-slate-600">
                     {Number(item.volume).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

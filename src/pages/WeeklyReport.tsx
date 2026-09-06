@@ -18,7 +18,13 @@ import {
   Printer,
   Download,
   ShieldAlert,
-  AlertTriangle
+  AlertTriangle,
+  Camera,
+  Image as ImageIcon,
+  FileCheck,
+  Eye,
+  UploadCloud,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   getProjects, 
@@ -30,7 +36,7 @@ import {
   getRABItems,
   getUsers
 } from '../services/firestore';
-import { Project, WeeklyReport as WeeklyReportType, Provider, UserProfile, RABItem, WeeklyReportDetail } from '../types';
+import { Project, WeeklyReport as WeeklyReportType, Provider, UserProfile, RABItem, WeeklyReportDetail, InspectionPhoto } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { WeeklyReportPDFModal } from '../components/WeeklyReportPDFModal';
@@ -39,6 +45,7 @@ import {
   isCriticalContract, 
   evaluateContractStatus 
 } from '../utils/contractStatus';
+import { compressImageFile } from '../utils/imageCompression';
 
 interface WeeklyReportProps {
   user: UserProfile | null;
@@ -83,6 +90,21 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
 
   const [ppkList, setPpkList] = useState<UserProfile[]>([]);
   const [copied, setCopied] = useState(false);
+
+  // States for inspection photo uploads and viewing
+  const [uploadingItemIndex, setUploadingItemIndex] = useState<string | null>(null);
+  const [inspectionPhotoPreview, setInspectionPhotoPreview] = useState<{
+    url: string;
+    title: string;
+    caption?: string;
+    stage?: string;
+    date?: string;
+  } | null>(null);
+  const [inspectionGalleryModal, setInspectionGalleryModal] = useState<{
+    isOpen: boolean;
+    weekNumber: number;
+    details: WeeklyReportDetail[];
+  } | null>(null);
 
   const [isWarningModalOpen, setIsWarningModalOpen] = useState(false);
   const [warningConfig, setWarningConfig] = useState({
@@ -243,7 +265,17 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
         
         // If report has details, use them. Otherwise start empty
         if (report.details && report.details.length > 0) {
-          setReportDetails(report.details);
+          // Enrich details with technicalSpecId and technicalSpecName from RAB if missing
+          const enriched = report.details.map(d => {
+            const matchingRab = items.find(i => i.id === d.rabItemId);
+            return {
+              ...d,
+              technicalSpecId: d.technicalSpecId || matchingRab?.technicalSpecId || '',
+              technicalSpecName: d.technicalSpecName || matchingRab?.technicalSpecName || '',
+              inspectionPhotos: d.inspectionPhotos || []
+            };
+          });
+          setReportDetails(enriched);
         } else {
           setReportDetails([]);
         }
@@ -307,12 +339,95 @@ const WeeklyReport: React.FC<WeeklyReportProps> = ({ user }) => {
       cumulativeVolume: lastCumulativeVolume,
       weight: (item.totalPrice / totalWeightBase) * 100,
       progressThisWeek: 0,
-      cumulativeProgress: lastCumulativeProgress
+      cumulativeProgress: lastCumulativeProgress,
+      technicalSpecId: item.technicalSpecId || '',
+      technicalSpecName: item.technicalSpecName || '',
+      inspectionPhotos: []
     };
 
     setReportDetails([...reportDetails, newDetail]);
     setShowItemSelector(false);
     setSearchTermItem('');
+  };
+
+  // Helper to add inspection photos for a specific RAB detail item
+  const handleAddInspectionPhoto = async (
+    rabItemId: string, 
+    files: FileList | null, 
+    stage: 'pra' | 'saat' | 'pasca' | 'umum' = 'saat',
+    defaultCaption: string = ''
+  ) => {
+    if (!files || files.length === 0) return;
+    setUploadingItemIndex(rabItemId);
+    try {
+      const newPhotos: InspectionPhoto[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) continue;
+        const compressedUrl = await compressImageFile(file, 900, 0.65);
+        const stageLabel = stage === 'pra' ? 'Pra Pelaksanaan' : stage === 'pasca' ? 'Pasca Pelaksanaan' : stage === 'saat' ? 'Saat Pelaksanaan' : 'Pemeriksaan Mutu';
+        newPhotos.push({
+          id: `insp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${i}`,
+          url: compressedUrl,
+          caption: defaultCaption || `${stageLabel} - ${file.name.replace(/\.[^/.]+$/, '')}`,
+          date: new Date().toISOString().split('T')[0],
+          stage
+        });
+      }
+
+      if (newPhotos.length > 0) {
+        setReportDetails(prev => prev.map(detail => {
+          if (detail.rabItemId === rabItemId) {
+            return {
+              ...detail,
+              inspectionPhotos: [...(detail.inspectionPhotos || []), ...newPhotos]
+            };
+          }
+          return detail;
+        }));
+      }
+    } catch (err) {
+      console.error("Error compressing/uploading inspection photo:", err);
+      alert("Gagal memproses foto. Silakan coba lagi.");
+    } finally {
+      setUploadingItemIndex(null);
+    }
+  };
+
+  const handleRemoveInspectionPhoto = (rabItemId: string, photoId: string) => {
+    setReportDetails(prev => prev.map(detail => {
+      if (detail.rabItemId === rabItemId) {
+        return {
+          ...detail,
+          inspectionPhotos: (detail.inspectionPhotos || []).filter(p => p.id !== photoId)
+        };
+      }
+      return detail;
+    }));
+  };
+
+  const handleUpdateInspectionPhotoCaption = (rabItemId: string, photoId: string, caption: string) => {
+    setReportDetails(prev => prev.map(detail => {
+      if (detail.rabItemId === rabItemId) {
+        return {
+          ...detail,
+          inspectionPhotos: (detail.inspectionPhotos || []).map(p => p.id === photoId ? { ...p, caption } : p)
+        };
+      }
+      return detail;
+    }));
+  };
+
+  const handleUpdateInspectionPhotoStage = (rabItemId: string, photoId: string, stage: 'pra' | 'saat' | 'pasca' | 'umum') => {
+    setReportDetails(prev => prev.map(detail => {
+      if (detail.rabItemId === rabItemId) {
+        return {
+          ...detail,
+          inspectionPhotos: (detail.inspectionPhotos || []).map(p => p.id === photoId ? { ...p, stage } : p)
+        };
+      }
+      return detail;
+    }));
   };
 
   const handleRemoveItem = (rabItemId: string) => {
@@ -876,6 +991,26 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {(() => {
+                            const totalPhotos = (report.details || []).reduce((acc, d) => acc + (d.inspectionPhotos?.length || 0), 0);
+                            if (totalPhotos > 0) {
+                              return (
+                                <button
+                                  onClick={() => setInspectionGalleryModal({
+                                    isOpen: true,
+                                    weekNumber: report.weekNumber,
+                                    details: report.details || []
+                                  })}
+                                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
+                                  title={`Lihat ${totalPhotos} Foto Pemeriksaan Teknis Minggu Ke-${report.weekNumber}`}
+                                >
+                                  <Camera size={14} className="text-indigo-600" />
+                                  <span>{totalPhotos} Foto</span>
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
                           <button 
                             onClick={() => {
                               setSelectedPDFWeek(report.weekNumber);
@@ -924,7 +1059,7 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden"
+              className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden"
             >
               <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                 <div>
@@ -1081,7 +1216,7 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                         </button>
                         
                         {showItemSelector && (
-                          <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-2xl border border-gray-100 z-[60] overflow-hidden">
+                          <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 z-[60] overflow-hidden">
                             <div className="p-2 border-b border-gray-50">
                               <input
                                 autoFocus
@@ -1105,7 +1240,14 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                                     onClick={() => handleAddItem(item)}
                                     className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
                                   >
-                                    <p className="text-xs font-bold text-gray-800 line-clamp-2">{item.description}</p>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-xs font-bold text-gray-800 line-clamp-2">{item.description}</p>
+                                      {item.technicalSpecName && (
+                                        <span className="shrink-0 text-[9px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200">
+                                          Spek: {item.technicalSpecName}
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-[10px] text-gray-400 mt-0.5">Vol: {item.volume} {item.unit}</p>
                                   </button>
                                 ))}
@@ -1123,50 +1265,189 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
                       </div>
                     </div>
                     
-                    <div className="space-y-3">
-                      {reportDetails.map((detail) => (
-                        <div key={detail.rabItemId} className="bg-gray-50/50 p-3 rounded-xl border border-gray-100 space-y-2 relative group">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(detail.rabItemId)}
-                            className="absolute -right-2 -top-2 w-6 h-6 bg-white shadow-sm border border-red-100 text-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50"
-                          >
-                            <Plus size={14} className="rotate-45" />
-                          </button>
+                    <div className="space-y-4">
+                      {reportDetails.map((detail) => {
+                        const hasTechnicalSpec = Boolean(detail.technicalSpecName || detail.technicalSpecId);
+                        const photos = detail.inspectionPhotos || [];
 
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1 pr-4">
-                              <p className="text-xs font-bold text-gray-800 line-clamp-1">{detail.description}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[10px] text-gray-400 font-medium">Vol Target: {detail.targetVolume.toFixed(3)} {detail.unit}</span>
-                                <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap">• Bobot: {detail.weight.toFixed(3)}%</span>
+                        return (
+                          <div key={detail.rabItemId} className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs space-y-3 relative group hover:border-blue-200 transition-all">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(detail.rabItemId)}
+                              className="absolute -right-2 -top-2 w-6 h-6 bg-white shadow-md border border-red-100 text-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 z-10"
+                              title="Hapus item dari laporan"
+                            >
+                              <Plus size={14} className="rotate-45" />
+                            </button>
+
+                            <div className="flex justify-between items-start gap-3">
+                              <div className="flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-xs sm:text-sm font-bold text-gray-800">{detail.description}</p>
+                                  {hasTechnicalSpec && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                      <FileCheck size={11} className="text-indigo-600" />
+                                      {detail.technicalSpecName}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[10px] text-gray-500 font-medium">Vol Target: {detail.targetVolume.toFixed(3)} {detail.unit}</span>
+                                  <span className="text-[10px] text-gray-500 font-medium whitespace-nowrap">• Bobot: {detail.weight.toFixed(3)}%</span>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-[10px] text-gray-500 font-medium italic">Prog: {detail.cumulativeProgress.toFixed(2)}%</p>
+                                <p className="text-xs font-bold text-blue-600">Vol Total: {detail.cumulativeVolume.toFixed(3)} {detail.unit}</p>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className="text-[10px] text-gray-400 font-medium italic">Prog: {detail.cumulativeProgress.toFixed(2)}%</p>
-                              <p className="text-xs font-bold text-blue-600">Vol Total: {detail.cumulativeVolume.toFixed(3)} {detail.unit}</p>
+                            
+                            <div className="flex items-center gap-3 bg-gray-50/70 p-2.5 rounded-lg border border-gray-100">
+                              <label className="text-[10px] font-bold text-gray-600 flex-shrink-0 uppercase">Volume Minggu Ini</label>
+                              <div className="flex-1 flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  value={detail.volumeThisWeek || ''}
+                                  onChange={(e) => handleVolumeChange(detail.rabItemId, parseFloat(e.target.value) || 0)}
+                                  className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-xs"
+                                  placeholder="0.000"
+                                />
+                                <span className="text-xs font-semibold text-gray-600 w-8">{detail.unit}</span>
+                              </div>
+                              <div className="w-20 text-right">
+                                <span className="text-xs font-bold text-emerald-600 font-mono">+{detail.progressThisWeek.toFixed(2)}%</span>
+                              </div>
                             </div>
+
+                            {/* Section Upload Foto Pemeriksaan Sesuai Spesifikasi Teknis */}
+                            {hasTechnicalSpec && (
+                              <div className="mt-3 pt-3 border-t border-indigo-100/80 bg-indigo-50/40 -mx-4 -mb-4 p-4 rounded-b-xl space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="p-1 bg-indigo-100 text-indigo-700 rounded-md">
+                                      <Camera size={14} />
+                                    </div>
+                                    <div>
+                                      <h5 className="text-xs font-bold text-indigo-950">
+                                        Pemeriksaan Spesifikasi Teknis: <span className="text-indigo-700">{detail.technicalSpecName}</span>
+                                      </h5>
+                                      <p className="text-[10px] text-indigo-700/80">Dokumentasikan foto hasil uji mutu / verifikasi lapangan pengawas</p>
+                                    </div>
+                                  </div>
+
+                                  <span className="text-[10px] font-bold bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                                    {photos.length} Foto Terlampir
+                                  </span>
+                                </div>
+
+                                {/* Upload & Stage Selection Bar */}
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95">
+                                    <UploadCloud size={14} />
+                                    <span>{uploadingItemIndex === detail.rabItemId ? 'Memproses Foto...' : 'Upload Foto Pemeriksaan'}</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      className="hidden"
+                                      disabled={uploadingItemIndex === detail.rabItemId}
+                                      onChange={(e) => {
+                                        handleAddInspectionPhoto(detail.rabItemId, e.target.files, 'saat');
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </label>
+
+                                  <span className="text-[10px] text-slate-500">
+                                    Format: JPG/PNG (Otomatis dikompresi untuk efisiensi penyimpanan)
+                                  </span>
+                                </div>
+
+                                {/* Foto Thumbnails Grid */}
+                                {photos.length > 0 ? (
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                                    {photos.map((photo) => (
+                                      <div key={photo.id} className="relative group bg-white rounded-xl border border-indigo-100/90 overflow-hidden shadow-xs flex flex-col">
+                                        <div className="aspect-video w-full bg-slate-100 relative overflow-hidden">
+                                          <img
+                                            src={photo.url}
+                                            alt={photo.caption || 'Foto Pemeriksaan'}
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200 cursor-pointer"
+                                            onClick={() => setInspectionPhotoPreview({
+                                              url: photo.url,
+                                              title: detail.description,
+                                              caption: photo.caption,
+                                              stage: photo.stage,
+                                              date: photo.date
+                                            })}
+                                          />
+                                          
+                                          {/* Stage Tag Overlay */}
+                                          <div className="absolute top-1.5 left-1.5">
+                                            <select
+                                              value={photo.stage || 'saat'}
+                                              onChange={(e) => handleUpdateInspectionPhotoStage(detail.rabItemId, photo.id, e.target.value as any)}
+                                              className="text-[9px] font-bold bg-black/70 hover:bg-black/90 text-white px-1.5 py-0.5 rounded outline-none cursor-pointer border border-white/20"
+                                            >
+                                              <option value="pra">Pra-Pelaksanaan</option>
+                                              <option value="saat">Saat Pelaksanaan</option>
+                                              <option value="pasca">Pasca-Pelaksanaan</option>
+                                              <option value="umum">Pemeriksaan Mutu</option>
+                                            </select>
+                                          </div>
+
+                                          {/* Action Buttons */}
+                                          <div className="absolute top-1.5 right-1.5 flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                              type="button"
+                                              onClick={() => setInspectionPhotoPreview({
+                                                url: photo.url,
+                                                title: detail.description,
+                                                caption: photo.caption,
+                                                stage: photo.stage,
+                                                date: photo.date
+                                              })}
+                                              className="p-1 bg-black/60 hover:bg-black/80 text-white rounded-md transition-colors"
+                                              title="Lihat foto penuh"
+                                            >
+                                              <Eye size={12} />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveInspectionPhoto(detail.rabItemId, photo.id)}
+                                              className="p-1 bg-rose-600/80 hover:bg-rose-700 text-white rounded-md transition-colors"
+                                              title="Hapus foto"
+                                            >
+                                              <X size={12} />
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        <div className="p-2 space-y-1 bg-white">
+                                          <input
+                                            type="text"
+                                            value={photo.caption || ''}
+                                            placeholder="Keterangan pemeriksaan (mis: Slump test 10cm)..."
+                                            onChange={(e) => handleUpdateInspectionPhotoCaption(detail.rabItemId, photo.id, e.target.value)}
+                                            className="w-full text-[10px] text-slate-800 bg-slate-50 border border-slate-200 rounded px-1.5 py-1 outline-none focus:border-indigo-400 font-medium"
+                                          />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="py-3 px-4 bg-white/80 rounded-lg border border-dashed border-indigo-200 text-center">
+                                    <p className="text-[11px] font-medium text-indigo-700">Belum ada foto pemeriksaan diunggah untuk item pekerjaan ini.</p>
+                                    <p className="text-[10px] text-slate-500 mt-0.5">Klik tombol "Upload Foto Pemeriksaan" di atas untuk menambahkan dokumentasi.</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          
-                          <div className="flex items-center gap-3">
-                            <label className="text-[10px] font-bold text-gray-500 flex-shrink-0 uppercase">Volume Minggu Ini</label>
-                            <div className="flex-1 flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.001"
-                                value={detail.volumeThisWeek || ''}
-                                onChange={(e) => handleVolumeChange(detail.rabItemId, parseFloat(e.target.value) || 0)}
-                                className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm font-bold text-blue-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                placeholder="0.000"
-                              />
-                              <span className="text-xs font-medium text-gray-400 w-8">{detail.unit}</span>
-                            </div>
-                            <div className="w-20 text-right">
-                              <span className="text-[10px] font-bold text-emerald-600">+{detail.progressThisWeek.toFixed(2)}%</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
 
                       {reportDetails.length === 0 && (
                         <div className="py-10 text-center bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
@@ -1463,6 +1744,177 @@ ${warningConfig.ppkName || '[Nama PPK]'}`;
           </div>
         </div>
       )}
+
+      {/* Lightbox Preview Modal for Single Inspection Photo */}
+      <AnimatePresence>
+        {inspectionPhotoPreview && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Camera className="text-indigo-400" size={18} />
+                  <div>
+                    <h4 className="text-sm font-bold truncate max-w-md">{inspectionPhotoPreview.title}</h4>
+                    <p className="text-[11px] text-slate-400">
+                      {inspectionPhotoPreview.stage === 'pra' ? 'Tahap: Pra-Pelaksanaan' : 
+                       inspectionPhotoPreview.stage === 'pasca' ? 'Tahap: Pasca-Pelaksanaan' : 
+                       inspectionPhotoPreview.stage === 'saat' ? 'Tahap: Saat Pelaksanaan' : 'Pemeriksaan Mutu'}
+                      {inspectionPhotoPreview.date ? ` • ${new Date(inspectionPhotoPreview.date).toLocaleDateString('id-ID')}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setInspectionPhotoPreview(null)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 bg-black flex items-center justify-center p-2 min-h-[300px] overflow-hidden">
+                <img
+                  src={inspectionPhotoPreview.url}
+                  alt={inspectionPhotoPreview.caption || 'Foto Pemeriksaan Teknis'}
+                  className="max-h-[65vh] max-w-full object-contain rounded-lg"
+                />
+              </div>
+
+              {inspectionPhotoPreview.caption && (
+                <div className="p-4 bg-slate-50 border-t border-slate-200">
+                  <p className="text-xs font-semibold text-slate-700">
+                    <span className="font-bold text-indigo-700">Keterangan:</span> {inspectionPhotoPreview.caption}
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Weekly Inspection Gallery Modal */}
+      <AnimatePresence>
+        {inspectionGalleryModal?.isOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full overflow-hidden flex flex-col max-h-[88vh]"
+            >
+              <div className="p-5 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-600/50 rounded-xl">
+                    <Camera size={22} className="text-indigo-200" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold">Galeri Foto Pemeriksaan Spesifikasi Teknis</h3>
+                    <p className="text-xs text-indigo-200">
+                      Laporan Minggu Ke-{inspectionGalleryModal.weekNumber} • {selectedProject?.name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setInspectionGalleryModal(null)}
+                  className="p-1.5 text-indigo-200 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50">
+                {(() => {
+                  const itemsWithPhotos = (inspectionGalleryModal.details || []).filter(
+                    d => (d.inspectionPhotos || []).length > 0
+                  );
+
+                  if (itemsWithPhotos.length === 0) {
+                    return (
+                      <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
+                        <ImageIcon size={48} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm font-bold text-slate-600">Belum ada foto pemeriksaan</p>
+                        <p className="text-xs text-slate-400 mt-1">Tidak ada foto dokumentasi teknis pada minggu ini.</p>
+                      </div>
+                    );
+                  }
+
+                  return itemsWithPhotos.map((item, idx) => (
+                    <div key={item.rabItemId || idx} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-400">#{idx + 1}</span>
+                            <h4 className="text-sm font-bold text-slate-900">{item.description}</h4>
+                          </div>
+                          {item.technicalSpecName && (
+                            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <FileCheck size={11} />
+                              Spesifikasi: {item.technicalSpecName}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
+                          {item.inspectionPhotos?.length || 0} Foto
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {(item.inspectionPhotos || []).map((photo) => (
+                          <div
+                            key={photo.id}
+                            onClick={() => setInspectionPhotoPreview({
+                              url: photo.url,
+                              title: item.description,
+                              caption: photo.caption,
+                              stage: photo.stage,
+                              date: photo.date
+                            })}
+                            className="group relative bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-pointer hover:shadow-md transition-all flex flex-col"
+                          >
+                            <div className="aspect-video w-full relative overflow-hidden bg-slate-200">
+                              <img
+                                src={photo.url}
+                                alt={photo.caption || 'Foto Pemeriksaan'}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                              <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-black/70 text-white rounded text-[9px] font-bold uppercase">
+                                {photo.stage === 'pra' ? 'Pra' : photo.stage === 'pasca' ? 'Pasca' : photo.stage === 'saat' ? 'Saat' : 'Mutu'}
+                              </div>
+                            </div>
+                            <div className="p-2 bg-white flex-1">
+                              <p className="text-[11px] font-medium text-slate-700 line-clamp-2">
+                                {photo.caption || 'Tanpa keterangan'}
+                              </p>
+                              {photo.date && (
+                                <p className="text-[9px] text-slate-400 mt-1">
+                                  {new Date(photo.date).toLocaleDateString('id-ID')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              <div className="p-4 bg-white border-t border-slate-200 flex justify-end">
+                <button
+                  onClick={() => setInspectionGalleryModal(null)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors"
+                >
+                  Tutup Galeri
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* PDF Export & Print Modal */}
       {selectedProject && isPDFModalOpen && (

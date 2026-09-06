@@ -51,6 +51,14 @@ export interface ProjectPhoto {
   progress: number;
 }
 
+export interface InspectionPhoto {
+  id: string;
+  url: string;
+  caption?: string;
+  date?: string;
+  stage?: 'pra' | 'saat' | 'pasca' | 'umum';
+}
+
 export interface WeeklyReportDetail {
   rabItemId: string;
   description: string;
@@ -61,6 +69,9 @@ export interface WeeklyReportDetail {
   weight: number;
   progressThisWeek: number;
   cumulativeProgress: number;
+  technicalSpecId?: string;
+  technicalSpecName?: string;
+  inspectionPhotos?: InspectionPhoto[];
 }
 
 export interface WeeklyReport {
@@ -147,4 +158,21 @@ export interface RABItem {
   unit: string;
   unitPrice: number;
   totalPrice: number;
+  technicalSpecId?: string;
+  technicalSpecName?: string;
+}
+
+export interface TechnicalSpec {
+  id: string;
+  projectId?: string;
+  projectName?: string;
+  specType: string;
+  inspectionProcedure: string;
+  category?: string;
+  standardReference?: string;
+  acceptanceCriteria?: string;
+  criticalPoints?: string;
+  inspectionTools?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }

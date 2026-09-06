@@ -13,7 +13,8 @@ import {
   User as UserIcon,
   Building2,
   Users,
-  Calculator
+  Calculator,
+  FileCheck
 } from 'lucide-react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './firebase';
@@ -32,6 +33,7 @@ import AHSP from './pages/AHSP';
 import PriceList from './pages/PriceList';
 import UserManagement from './pages/UserManagement';
 import RAB from './pages/RAB';
+import TechnicalSpecs from './pages/TechnicalSpecs';
 import Login from './pages/Login';
 
 import AppLogo from './components/AppLogo';
@@ -45,6 +47,7 @@ const Sidebar = ({ user, onLogout }: { user: UserProfile | null, onLogout: () =>
     { name: 'Proyek', path: '/proyek', icon: Briefcase },
     { name: 'Penyedia', path: '/penyedia', icon: Building2, hideForRoles: ['pengawas'] },
     { name: 'RAB Proyek', path: '/rab', icon: Calculator },
+    { name: 'Spesifikasi Teknis', path: '/spesifikasi-teknis', icon: FileCheck },
     { name: 'Foto & Video', path: '/foto', icon: Camera },
     { name: 'Laporan Mingguan', path: '/laporan', icon: FileText },
     { name: 'Kurva S', path: '/kurva-s', icon: LineChart },
@@ -313,6 +316,7 @@ export default function App() {
                 <Route path="/peta" element={<ProjectMap user={user} />} />
                 <Route path="/ahsp" element={<AHSP user={user} />} />
                 <Route path="/rab" element={<RAB user={user} />} />
+                <Route path="/spesifikasi-teknis" element={<TechnicalSpecs user={user} />} />
                 <Route path="/ahsp/upah" element={<PriceList user={user} />} />
                 <Route path="/ahsp/bahan" element={<PriceList user={user} />} />
                 <Route path="/ahsp/alat" element={<PriceList user={user} />} />
