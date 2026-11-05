@@ -196,6 +196,23 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["specType", "inspectionProcedure"]
+    },
+    "ProjectChatMessage": {
+      "title": "Pesan Diskusi Proyek",
+      "description": "Real-time communication message between supervisors, PPK, and contractors for technical issues",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "senderEmail": { "type": "string" },
+        "message": { "type": "string" },
+        "category": { "type": "string", "enum": ["umum", "kendala_teknis", "instruksi_lapangan", "material_alat", "cuaca_keadaan"] },
+        "attachmentUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectId", "senderId", "senderName", "message"]
     }
   },
   "firestore": {
@@ -218,6 +235,10 @@
     "/projects/{projectId}/weekly_reports/{reportId}": {
       "schema": "WeeklyReport",
       "description": "Weekly progress reports"
+    },
+    "/projects/{projectId}/messages/{messageId}": {
+      "schema": "ProjectChatMessage",
+      "description": "Real-time project discussion and technical issue chat messages"
     },
     "/providers/{providerId}": {
       "schema": "Provider",

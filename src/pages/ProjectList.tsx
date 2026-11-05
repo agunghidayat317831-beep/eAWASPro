@@ -17,7 +17,8 @@ import {
   ClipboardCheck,
   ChevronDown,
   ChevronUp,
-  User
+  User,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -33,6 +34,8 @@ import {
 } from '../services/firestore';
 import { Project, UserProfile, Provider, ProjectEvaluation } from '../types';
 import { useNavigate } from 'react-router-dom';
+import ProjectTimeline from '../components/ProjectTimeline';
+import ProjectChatModal from '../components/ProjectChatModal';
 
 export default function ProjectList({ user }: { user: UserProfile }) {
   const navigate = useNavigate();
@@ -73,6 +76,9 @@ export default function ProjectList({ user }: { user: UserProfile }) {
   });
   const [existingEvaluation, setExistingEvaluation] = useState<ProjectEvaluation | null>(null);
   const [isSubmittingEvaluation, setIsSubmittingEvaluation] = useState(false);
+
+  // Chat Modal State
+  const [chatProject, setChatProject] = useState<Project | null>(null);
 
   useEffect(() => {
     const unsubscribeProjects = getProjects((data) => {
@@ -447,21 +453,36 @@ export default function ProjectList({ user }: { user: UserProfile }) {
                   </div>
                 </div>
 
+                {/* Project Timeline & Milestones Visualization */}
+                <div className="pt-1">
+                  <ProjectTimeline project={project} />
+                </div>
+
                 <div className="pt-2 space-y-2">
                   <button 
-                    onClick={() => navigate('/rab', { state: { projectId: project.id } })}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-emerald-50 hover:text-emerald-600 transition-all border border-slate-100"
+                    type="button"
+                    onClick={() => setChatProject(project)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/80 rounded-xl font-bold transition-all border border-emerald-200/80 shadow-2xs cursor-pointer active:scale-98"
                   >
-                    <Calculator size={18} />
-                    Lihat RAB
+                    <MessageSquare size={17} />
+                    <span>Diskusi &amp; Kendala Teknis</span>
                   </button>
-                  <button 
-                    onClick={() => navigate('/laporan', { state: { projectId: project.id } })}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100"
-                  >
-                    <FileText size={18} />
-                    Laporan Mingguan
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => navigate('/rab', { state: { projectId: project.id } })}
+                      className="flex items-center justify-center gap-1.5 py-2.5 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-slate-100 transition-all border border-slate-100 text-xs"
+                    >
+                      <Calculator size={16} />
+                      Lihat RAB
+                    </button>
+                    <button 
+                      onClick={() => navigate('/laporan', { state: { projectId: project.id } })}
+                      className="flex items-center justify-center gap-1.5 py-2.5 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100 text-xs"
+                    >
+                      <FileText size={16} />
+                      Laporan
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -846,6 +867,16 @@ export default function ProjectList({ user }: { user: UserProfile }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Real-time Project Chat & Technical Discussion Modal */}
+      {chatProject && (
+        <ProjectChatModal
+          isOpen={!!chatProject}
+          onClose={() => setChatProject(null)}
+          project={chatProject}
+          currentUser={user}
+        />
       )}
     </div>
   );

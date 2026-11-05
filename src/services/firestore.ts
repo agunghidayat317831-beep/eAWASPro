@@ -15,7 +15,7 @@ import {
   writeBatch
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
-import { Project, ProjectPhoto, UserProfile, WeeklyReport, Provider, ProjectEvaluation, AHSP, LaborMaster, MaterialMaster, EquipmentMaster, RABItem, TechnicalSpec } from "../types";
+import { Project, ProjectPhoto, UserProfile, WeeklyReport, Provider, ProjectEvaluation, AHSP, LaborMaster, MaterialMaster, EquipmentMaster, RABItem, TechnicalSpec, ProjectChatMessage } from "../types";
 
 enum OperationType {
   CREATE = 'create',
@@ -997,6 +997,63 @@ export const seedDefaultTechnicalSpecs = async () => {
 
   for (const spec of defaultSpecs) {
     await addTechnicalSpec(spec);
+  }
+};
+
+// ==========================================
+// Diskusi & Chat Proyek Real-Time
+// ==========================================
+
+export const getProjectMessages = (
+  projectId: string, 
+  callback: (messages: ProjectChatMessage[]) => void
+) => {
+  const path = `projects/${projectId}/messages`;
+  const q = query(
+    collection(db, 'projects', projectId, 'messages'), 
+    orderBy('createdAt', 'asc')
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const messages = snapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt
+      } as ProjectChatMessage;
+    });
+    callback(messages);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.LIST, path);
+  });
+};
+
+export const sendProjectMessage = async (
+  projectId: string, 
+  messageData: Omit<ProjectChatMessage, 'id' | 'createdAt'>
+) => {
+  const path = `projects/${projectId}/messages`;
+  try {
+    const cleaned = deepCleanUndefined({
+      ...messageData,
+      createdAt: Timestamp.now()
+    });
+    const docRef = await addDoc(collection(db, 'projects', projectId, 'messages'), cleaned);
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+    throw error;
+  }
+};
+
+export const deleteProjectMessage = async (projectId: string, messageId: string) => {
+  const path = `projects/${projectId}/messages/${messageId}`;
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'messages', messageId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+    throw error;
   }
 };
 

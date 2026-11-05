@@ -176,3 +176,16 @@ export interface TechnicalSpec {
   createdAt?: any;
   updatedAt?: any;
 }
+
+export interface ProjectChatMessage {
+  id: string;
+  projectId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: 'admin' | 'pengawas' | 'ppk' | 'kepala_dinas' | 'user' | 'penyedia';
+  senderEmail?: string;
+  message: string;
+  category?: 'umum' | 'kendala_teknis' | 'instruksi_lapangan' | 'material_alat' | 'cuaca_keadaan';
+  attachmentUrl?: string;
+  createdAt: any;
+}

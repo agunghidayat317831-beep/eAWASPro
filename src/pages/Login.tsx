@@ -6,33 +6,50 @@ import {
   sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth } from '../firebase';
-import { getUserProfile, createUserProfile, getUserProfileByEmail, getUserProfileByUsername, deleteUser } from '../services/firestore';
-import { LogIn, ShieldCheck, Mail, Lock, User, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
-
+import { 
+  getUserProfile, 
+  createUserProfile, 
+  getUserProfileByEmail, 
+  getUserProfileByUsername, 
+  deleteUser 
+} from '../services/firestore';
+import { 
+  Lock, 
+  User as UserIcon, 
+  Mail, 
+  Eye, 
+  EyeOff, 
+  Loader2, 
+  CheckCircle2
+} from 'lucide-react';
 import AppLogo from '../components/AppLogo';
 
 export default function Login() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isActive, setIsActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    name: ''
-  });
+
+  // Form inputs
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerName, setRegisterName] = useState('');
 
   const handleResetPassword = async () => {
-    if (!formData.email) {
-      setError('Silakan masukkan email Anda terlebih dahulu untuk reset password.');
+    if (!loginIdentifier || !loginIdentifier.includes('@')) {
+      setError('Masukkan alamat email yang valid di kolom login untuk mereset kata sandi.');
       return;
     }
     setLoading(true);
+    setError('');
     try {
-      await sendPasswordResetEmail(auth, formData.email);
-      setError('Link reset password telah dikirim ke email Anda. Silakan cek kotak masuk (atau folder spam).');
+      await sendPasswordResetEmail(auth, loginIdentifier.trim());
+      setSuccessMessage('Tautan reset password telah dikirim ke email Anda.');
     } catch (err: any) {
       setError('Gagal mengirim email reset: ' + (err.message || 'Coba lagi nanti.'));
     } finally {
@@ -40,103 +57,108 @@ export default function Login() {
     }
   };
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMessage('');
 
     try {
-      if (isLogin) {
-        let loginEmail = '';
-        const identifier = formData.username.trim();
+      let loginEmail = '';
+      const identifier = loginIdentifier.trim();
 
-        // Check if identifier is email or username
-        const isEmail = identifier.includes('@');
-
-        if (isEmail) {
-          loginEmail = identifier;
-        } else {
-          // Login via username - find profile first
-          const profile = await getUserProfileByUsername(identifier);
-          if (!profile) {
-            setError('Username atau email tidak ditemukan. Silakan periksa kembali atau hubungi administrator.');
-            setLoading(false);
-            return;
-          }
-          loginEmail = profile.email;
-        }
-
-        await signInWithEmailAndPassword(auth, loginEmail, formData.password);
+      if (identifier.includes('@')) {
+        loginEmail = identifier;
       } else {
-        // Register logic (requires email)
-        if (!formData.email) {
-          setError('Email wajib diisi untuk pendaftaran akun.');
+        const profile = await getUserProfileByUsername(identifier);
+        if (!profile) {
+          setError('Username atau email tidak terdaftar di sistem e-AWAS Pro.');
           setLoading(false);
           return;
         }
-        if (!formData.username && !isLogin) {
-          setError('Username wajib diisi.');
-          setLoading(false);
-          return;
-        }
-        const result = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-        const user = result.user;
+        loginEmail = profile.email;
+      }
 
-        if (formData.name) {
-          await updateProfile(user, { displayName: formData.name });
-        }
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+    } catch (err: any) {
+      const errorCode = err.code || '';
+      const errorMessage = err.message || '';
 
-        // Check if a pending profile exists for this email
-        const pendingProfile = await getUserProfileByEmail(formData.email);
-        
-        if (pendingProfile && (pendingProfile as any).isPending) {
-          // Link the pending profile to the new UID
-          await createUserProfile({
-            ...pendingProfile,
-            uid: user.uid,
-            username: formData.username || pendingProfile.username || formData.email.split('@')[0],
-            name: formData.name || pendingProfile.name,
-            password: formData.password, // Save password for admin visibility
-            isPending: false
-          } as any);
-          
-          // Delete the temporary pending document
+      if (
+        errorCode === 'auth/user-not-found' ||
+        errorCode === 'auth/wrong-password' ||
+        errorCode === 'auth/invalid-credential' ||
+        errorMessage.includes('auth/invalid-credential')
+      ) {
+        setError('Username/Email atau password salah. Pastikan kredensial Anda benar.');
+      } else if (errorCode === 'auth/too-many-requests') {
+        setError('Terlalu banyak percobaan gagal. Silakan tunggu beberapa saat atau reset password.');
+      } else {
+        setError('Gagal masuk: ' + (errorMessage || 'Periksa koneksi Anda.'));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    if (!registerEmail) {
+      setError('Email wajib diisi.');
+      setLoading(false);
+      return;
+    }
+    if (!registerUsername) {
+      setError('Username wajib diisi.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const result = await createUserWithEmailAndPassword(auth, registerEmail.trim(), registerPassword);
+      const user = result.user;
+
+      const cleanName = registerName.trim() || registerUsername.trim();
+      await updateProfile(user, { displayName: cleanName });
+
+      // Check for pending profile created by admin
+      const pendingProfile = await getUserProfileByEmail(registerEmail.trim());
+
+      if (pendingProfile && (pendingProfile as any).isPending) {
+        await createUserProfile({
+          ...pendingProfile,
+          uid: user.uid,
+          username: registerUsername.toLowerCase().replace(/\s+/g, ''),
+          name: cleanName,
+          password: registerPassword,
+          isPending: false
+        } as any);
+
+        if (pendingProfile.uid.startsWith('pending_')) {
           await deleteUser(pendingProfile.uid);
-        } else if (!pendingProfile) {
-          // Create a new profile if none exists
-          await createUserProfile({
-            uid: user.uid,
-            email: user.email!,
-            username: formData.username || user.email!.split('@')[0],
-            name: formData.name || 'User',
-            password: formData.password, // Save password for admin visibility
-            role: 'user'
-          });
         }
+      } else if (!pendingProfile) {
+        await createUserProfile({
+          uid: user.uid,
+          email: user.email!,
+          username: registerUsername.toLowerCase().replace(/\s+/g, ''),
+          name: cleanName,
+          password: registerPassword,
+          role: 'user'
+        });
       }
     } catch (err: any) {
-      const errorCode = err.code || "";
-      const errorMessage = err.message || "";
-      
-      if (errorCode === 'auth/user-not-found' || 
-          errorCode === 'auth/wrong-password' || 
-          errorCode === 'auth/invalid-credential' ||
-          errorMessage.includes('auth/invalid-credential')) {
-        setError('Email atau password salah. Jika ini pertama kalinya Anda masuk, pastikan Anda telah mendaftar melalui menu "Daftar Akun" terlebih dahulu.');
-      } else if (errorCode === 'auth/email-already-in-use') {
-        setError('Email ini sudah terdaftar sebagai akun aktif. Silakan gunakan menu "Login" untuk masuk.');
+      const errorCode = err.code || '';
+      if (errorCode === 'auth/email-already-in-use') {
+        setError('Email ini sudah terdaftar. Silakan pindah ke halaman Login.');
       } else if (errorCode === 'auth/weak-password') {
-        setError('Password terlalu lemah. Minimal harus 6 karakter.');
-      } else if (errorCode === 'auth/invalid-email') {
-        setError('Alamat email tidak valid. Periksa kembali penulisan email Anda.');
-      } else if (errorCode === 'auth/user-disabled') {
-        setError('Akun ini telah dinonaktifkan oleh administrator.');
-      } else if (errorCode === 'auth/too-many-requests') {
-        setError('Terlalu banyak percobaan masuk yang gagal. Akun dikunci sementara untuk keamanan. Silakan coba lagi nanti atau reset password.');
-      } else if (errorCode === 'auth/network-request-failed') {
-        setError('Gagal menghubungkan ke server. Periksa koneksi internet Anda.');
+        setError('Password terlalu singkat (minimal 6 karakter).');
       } else {
-        setError('Terjadi kesalahan saat masuk: ' + (errorMessage || 'Silakan hubungi admin.'));
+        setError('Gagal mendaftar: ' + (err.message || 'Coba lagi.'));
       }
     } finally {
       setLoading(false);
@@ -144,155 +166,469 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4 relative overflow-hidden">
-      {/* Background patterns */}
-      <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-emerald-500 blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500 blur-[120px]"></div>
+    <div className="min-h-screen bg-[#212529] flex flex-col items-center justify-center p-4 selection:bg-[#7494ec] selection:text-white font-sans antialiased">
+      
+      {/* Embedded CSS for exact 1:1 smooth animations from the reference video */}
+      <style>{`
+        .custom-auth-container {
+          position: relative;
+          width: 850px;
+          height: 550px;
+          background: #ffffff;
+          border-radius: 30px;
+          box-shadow: 0 0 30px rgba(0, 0, 0, 0.35);
+          overflow: hidden;
+        }
+
+        /* Form boxes styling */
+        .custom-form-box {
+          position: absolute;
+          top: 0;
+          width: 50%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #ffffff;
+          transition: all 0.6s ease-in-out;
+          z-index: 1;
+        }
+
+        .custom-form-box.login-box {
+          left: 0;
+          z-index: 2;
+          opacity: 1;
+          pointer-events: auto;
+        }
+
+        .custom-auth-container.active .custom-form-box.login-box {
+          transform: translateX(100%);
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .custom-form-box.register-box {
+          left: 0;
+          z-index: 1;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .custom-auth-container.active .custom-form-box.register-box {
+          transform: translateX(100%);
+          opacity: 1;
+          pointer-events: auto;
+          z-index: 2;
+        }
+
+        /* Sliding toggle box */
+        .custom-toggle-box {
+          position: absolute;
+          top: 0;
+          left: 50%;
+          width: 50%;
+          height: 100%;
+          background: #7494ec;
+          border-radius: 150px 0 0 150px;
+          z-index: 10;
+          color: #ffffff;
+          transition: all 0.6s ease-in-out;
+          overflow: hidden;
+        }
+
+        .custom-auth-container.active .custom-toggle-box {
+          left: 0;
+          border-radius: 0 150px 150px 0;
+        }
+
+        .custom-toggle-panel {
+          position: absolute;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          padding: 0 35px;
+          text-align: center;
+          transition: all 0.6s ease-in-out;
+        }
+
+        /* Left toggle panel (Hello, Welcome! -> Prompt Register) */
+        .custom-toggle-panel.panel-left {
+          left: 0;
+          opacity: 1;
+          pointer-events: auto;
+          transition-delay: 0.1s;
+        }
+
+        .custom-auth-container.active .custom-toggle-panel.panel-left {
+          transform: translateX(-100%);
+          opacity: 0;
+          pointer-events: none;
+          transition-delay: 0s;
+        }
+
+        /* Right toggle panel (Welcome Back! -> Prompt Login) */
+        .custom-toggle-panel.panel-right {
+          right: 0;
+          transform: translateX(100%);
+          opacity: 0;
+          pointer-events: none;
+          transition-delay: 0s;
+        }
+
+        .custom-auth-container.active .custom-toggle-panel.panel-right {
+          transform: translateX(0);
+          opacity: 1;
+          pointer-events: auto;
+          transition-delay: 0.1s;
+        }
+
+        /* Mobile fallback adjustments */
+        @media (max-width: 768px) {
+          .custom-auth-container {
+            width: 100%;
+            height: auto;
+            min-height: 600px;
+            border-radius: 24px;
+          }
+          .custom-form-box {
+            position: relative;
+            width: 100%;
+            height: auto;
+            padding: 24px;
+            transform: none !important;
+            opacity: 1 !important;
+            display: block;
+          }
+          .custom-toggle-box {
+            display: none;
+          }
+        }
+      `}</style>
+
+      {/* Top Title as in the Video ("Modern Login/Signup Form") */}
+      <div className="mb-6 text-center">
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center justify-center gap-2">
+          <span className="text-[#6c8cff]">e-AWAS</span> Pro
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1">
+          Sistem Monitoring Proyek Pemerintah
+        </p>
       </div>
 
-      <div className="w-full max-w-md space-y-8 relative z-10">
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center p-6 bg-white/5 rounded-[2.5rem] mb-4 border border-white/10 backdrop-blur-sm">
-            <AppLogo className="scale-150" />
-          </div>
-          <h1 className="text-4xl font-black text-white tracking-tight">e-AWAS Pro</h1>
-          <p className="text-slate-400 font-medium">Sistem Monitoring Proyek Pemerintah</p>
-        </div>
+      {/* The Animated Container */}
+      <div className={`custom-auth-container ${isActive ? 'active' : ''}`}>
+        
+        {/* ======================================================= */}
+        {/* 1. LOGIN FORM BOX (Left position, moves right on active) */}
+        {/* ======================================================= */}
+        <div className={`custom-form-box login-box ${isActive ? 'max-md:hidden' : 'max-md:block'}`}>
+          <div className="w-[85%] max-w-[340px] mx-auto py-8">
+            <h1 className="text-3xl font-extrabold text-slate-900 text-center mb-6">Login</h1>
 
-        <div className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl space-y-6">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-white">
-              {isLogin ? 'Selamat Datang' : 'Buat Akun Baru'}
-            </h2>
-            <p className="text-sm text-slate-400">
-              {isLogin 
-                ? 'Silakan login untuk mengakses dashboard monitoring.' 
-                : 'Daftar untuk mulai memantau proyek pembangunan.'}
-            </p>
-          </div>
-
-          {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm font-medium">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleAuth} className="space-y-4">
-            {!isLogin && (
-              <>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wider">Nama Lengkap</label>
-                  <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input
-                      required
-                      type="text"
-                      placeholder="Nama Anda"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-slate-600 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wider">Username</label>
-                  <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input
-                      required
-                      type="text"
-                      placeholder="username_baru"
-                      value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/\s+/g, '') })}
-                      className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-slate-600 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    />
-                  </div>
-                </div>
-              </>
+            {error && !isActive && (
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold">
+                {error}
+              </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wider">{isLogin ? 'Email atau Username' : 'Email'}</label>
-              <div className="relative">
-                {isLogin ? (
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                ) : (
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                )}
+            {successMessage && !isActive && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center gap-1.5">
+                <CheckCircle2 size={14} />
+                {successMessage}
+              </div>
+            )}
+
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              {/* Username / Email field */}
+              <div className="relative flex items-center bg-[#f0f2f5] rounded-xl px-4 py-3 border border-transparent focus-within:border-[#7494ec] transition-colors">
                 <input
                   required
                   type="text"
-                  placeholder={isLogin ? "email@anda.com atau username" : "email@instansi.go.id"}
-                  value={isLogin ? formData.username : formData.email}
-                  onChange={(e) => setFormData({ ...formData, [isLogin ? 'username' : 'email']: e.target.value })}
-                  className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-slate-600 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                  placeholder="Username"
+                  value={loginIdentifier}
+                  onChange={(e) => setLoginIdentifier(e.target.value)}
+                  className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none pr-8 font-medium"
                 />
+                <UserIcon size={18} className="absolute right-4 text-slate-400 pointer-events-none" />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-wider">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              {/* Password field */}
+              <div className="relative flex items-center bg-[#f0f2f5] rounded-xl px-4 py-3 border border-transparent focus-within:border-[#7494ec] transition-colors">
                 <input
                   required
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-12 pr-12 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-slate-600 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none pr-8 font-medium"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-emerald-400 transition-colors"
+                  className="absolute right-4 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={18} /> : <Lock size={18} />}
+                </button>
+              </div>
+
+              {/* Forgot password */}
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  className="text-xs font-medium text-slate-500 hover:text-[#7494ec] transition-colors cursor-pointer"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 px-6 rounded-xl bg-[#7494ec] hover:bg-[#5f82e8] text-white font-bold text-sm shadow-md shadow-[#7494ec]/30 transition-all hover:shadow-lg active:scale-98 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {loading ? <Loader2 size={18} className="animate-spin" /> : 'Login'}
+              </button>
+            </form>
+
+            {/* Social logins */}
+            <div className="mt-7 text-center">
+              <p className="text-xs text-slate-400 font-medium mb-3">
+                or login with social platforms
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setLoginIdentifier('agunghidayat317831@gmail.com')}
+                  className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 hover:text-[#7494ec] hover:border-[#7494ec] hover:bg-slate-50 transition-all font-bold text-sm cursor-pointer"
+                  title="Admin"
+                >
+                  G
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginIdentifier('pengawas')}
+                  className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 hover:text-[#7494ec] hover:border-[#7494ec] hover:bg-slate-50 transition-all font-bold text-sm cursor-pointer"
+                  title="Pengawas"
+                >
+                  P
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginIdentifier('ppk')}
+                  className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 hover:text-[#7494ec] hover:border-[#7494ec] hover:bg-slate-50 transition-all font-bold text-sm cursor-pointer"
+                  title="PPK"
+                >
+                  K
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLoginIdentifier('penyedia')}
+                  className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 hover:text-[#7494ec] hover:border-[#7494ec] hover:bg-slate-50 transition-all font-bold text-sm cursor-pointer"
+                  title="Penyedia CV/PT"
+                >
+                  in
+                </button>
+              </div>
+
+              {/* Mobile button to toggle */}
+              <div className="mt-6 md:hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setSuccessMessage('');
+                    setIsActive(true);
+                  }}
+                  className="text-xs font-bold text-[#7494ec] hover:underline"
+                >
+                  Belum punya akun? Buat Akun Baru (Register)
                 </button>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 bg-emerald-600 text-white px-6 py-4 rounded-2xl font-bold hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-emerald-900/20 mt-4"
-            >
-              {loading ? (
-                <Loader2 className="animate-spin" size={20} />
-              ) : (
-                <>
-                  {isLogin ? 'Masuk Sekarang' : 'Daftar Akun'}
-                  <ArrowRight size={20} />
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="pt-4 text-center space-y-4">
-            {isLogin && (
-              <button
-                onClick={handleResetPassword}
-                className="block w-full text-xs font-medium text-slate-500 hover:text-emerald-400 transition-colors"
-              >
-                Lupa password? Klik untuk reset
-              </button>
-            )}
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
-            >
-              {isLogin ? 'Belum punya akun? Daftar di sini' : 'Sudah punya akun? Login di sini'}
-            </button>
-            <p className="text-xs text-slate-500">
-              Dengan masuk, Anda menyetujui Ketentuan Layanan dan Kebijakan Privasi kami.
-            </p>
           </div>
         </div>
 
-        <div className="text-center">
-          <p className="text-slate-600 text-xs font-medium">© 2026 e-AWAS Pro Indonesia. All rights reserved.</p>
+        {/* ========================================================== */}
+        {/* 2. REGISTER FORM BOX (Left position, slides in on active)  */}
+        {/* ========================================================== */}
+        <div className={`custom-form-box register-box ${!isActive ? 'max-md:hidden' : 'max-md:block'}`}>
+          <div className="w-[85%] max-w-[340px] mx-auto py-8">
+            <h1 className="text-3xl font-extrabold text-slate-900 text-center mb-6">Registration</h1>
+
+            {error && isActive && (
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+              {/* Username */}
+              <div className="relative flex items-center bg-[#f0f2f5] rounded-xl px-4 py-3 border border-transparent focus-within:border-[#7494ec] transition-colors">
+                <input
+                  required
+                  type="text"
+                  placeholder="Username"
+                  value={registerUsername}
+                  onChange={(e) => setRegisterUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                  className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none pr-8 font-medium"
+                />
+                <UserIcon size={18} className="absolute right-4 text-slate-400 pointer-events-none" />
+              </div>
+
+              {/* Email */}
+              <div className="relative flex items-center bg-[#f0f2f5] rounded-xl px-4 py-3 border border-transparent focus-within:border-[#7494ec] transition-colors">
+                <input
+                  required
+                  type="email"
+                  placeholder="Email"
+                  value={registerEmail}
+                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none pr-8 font-medium"
+                />
+                <Mail size={18} className="absolute right-4 text-slate-400 pointer-events-none" />
+              </div>
+
+              {/* Password */}
+              <div className="relative flex items-center bg-[#f0f2f5] rounded-xl px-4 py-3 border border-transparent focus-within:border-[#7494ec] transition-colors">
+                <input
+                  required
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Password"
+                  value={registerPassword}
+                  onChange={(e) => setRegisterPassword(e.target.value)}
+                  className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none pr-8 font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Lock size={18} />}
+                </button>
+              </div>
+
+              {/* Full name (Optional) */}
+              <div className="relative flex items-center bg-[#f0f2f5] rounded-xl px-4 py-3 border border-transparent focus-within:border-[#7494ec] transition-colors">
+                <input
+                  type="text"
+                  placeholder="Nama Lengkap (Opsional)"
+                  value={registerName}
+                  onChange={(e) => setRegisterName(e.target.value)}
+                  className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none pr-8 font-medium"
+                />
+                <UserIcon size={18} className="absolute right-4 text-slate-400 pointer-events-none" />
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 px-6 rounded-xl bg-[#7494ec] hover:bg-[#5f82e8] text-white font-bold text-sm shadow-md shadow-[#7494ec]/30 transition-all hover:shadow-lg active:scale-98 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 mt-2"
+              >
+                {loading ? <Loader2 size={18} className="animate-spin" /> : 'Register'}
+              </button>
+            </form>
+
+            {/* Social logins */}
+            <div className="mt-5 text-center">
+              <p className="text-xs text-slate-400 font-medium mb-3">
+                or register with social platforms
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <span className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">G</span>
+                <span className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">f</span>
+                <span className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">🐙</span>
+                <span className="w-9 h-9 rounded-xl border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">in</span>
+              </div>
+
+              {/* Mobile button to toggle */}
+              <div className="mt-4 md:hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setSuccessMessage('');
+                    setIsActive(false);
+                  }}
+                  className="text-xs font-bold text-[#7494ec] hover:underline"
+                >
+                  Sudah punya akun? Masuk di sini (Login)
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* ============================================================== */}
+        {/* 3. SLIDING TOGGLE BOX & PANELS                                 */}
+        {/* ============================================================== */}
+        <div className="custom-toggle-box">
+          
+          {/* Panel Left (Shown initially: "Hello, Welcome! Don't have an account? -> Register") */}
+          <div className="custom-toggle-panel panel-left">
+            <div className="mb-4 w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-white backdrop-blur-xs">
+              <AppLogo />
+            </div>
+            <h1 className="text-3xl font-extrabold text-white mb-2 leading-tight">
+              Hello, Welcome!
+            </h1>
+            <p className="text-xs text-blue-100 font-medium mb-8 max-w-[240px]">
+              Don&apos;t have an account?
+            </p>
+            <button
+              type="button"
+              id="register"
+              onClick={() => {
+                setError('');
+                setSuccessMessage('');
+                setIsActive(true);
+              }}
+              className="py-3 px-10 rounded-2xl border-2 border-white text-white font-bold text-xs uppercase tracking-wider hover:bg-white hover:text-[#7494ec] transition-all cursor-pointer shadow-lg active:scale-95"
+            >
+              Register
+            </button>
+          </div>
+
+          {/* Panel Right (Shown when active: "Welcome Back! Already have an account? -> Login") */}
+          <div className="custom-toggle-panel panel-right">
+            <div className="mb-4 w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-white backdrop-blur-xs">
+              <AppLogo />
+            </div>
+            <h1 className="text-3xl font-extrabold text-white mb-2 leading-tight">
+              Welcome Back!
+            </h1>
+            <p className="text-xs text-blue-100 font-medium mb-8 max-w-[240px]">
+              Already have an account?
+            </p>
+            <button
+              type="button"
+              id="login"
+              onClick={() => {
+                setError('');
+                setSuccessMessage('');
+                setIsActive(false);
+              }}
+              className="py-3 px-10 rounded-2xl border-2 border-white text-white font-bold text-xs uppercase tracking-wider hover:bg-white hover:text-[#7494ec] transition-all cursor-pointer shadow-lg active:scale-95"
+            >
+              Login
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* Footer Info */}
+      <div className="mt-8 text-center text-xs text-slate-500 font-medium">
+        &copy; 2026 e-AWAS Pro &bull; Aplikasi Pengawasan dan Monitoring Proyek Konstruksi
       </div>
     </div>
   );
