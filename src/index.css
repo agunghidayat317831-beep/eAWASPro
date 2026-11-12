@@ -26,6 +26,12 @@
   will-change: max-width, opacity, transform, width;
 }
 
+.user-live-gps-marker {
+  background: transparent !important;
+  border: none !important;
+  overflow: visible !important;
+}
+
 .leaflet-popup-content-wrapper {
   border-radius: 1rem !important;
   padding: 0 !important;
