@@ -28,10 +28,16 @@ import {
   Activity,
   Layers,
   Calendar,
-  Filter
+  Filter,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  X,
+  FileWarning
 } from 'lucide-react';
 import { getProjects, getProviders } from '../services/firestore';
 import { Project, UserProfile, Provider } from '../types';
+import AppLogo from '../components/AppLogo';
 
 interface InteractiveStatCardProps {
   title: string;
@@ -93,6 +99,10 @@ export default function Dashboard({ user }: { user: UserProfile }) {
   // Interactive Filter selection: 'all' | 'ongoing' | 'completed' | 'critical' | 'delayed' | 'not_started'
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [chartViewMode, setChartViewMode] = useState<'budget' | 'progress' | 'delay'>('budget');
+
+  // Automatic Critical Delay Alert Banner States
+  const [isAlertBannerDismissed, setIsAlertBannerDismissed] = useState<boolean>(false);
+  const [isAlertDetailsExpanded, setIsAlertDetailsExpanded] = useState<boolean>(true);
 
   useEffect(() => {
     const unsubscribeProjects = getProjects((data) => {
@@ -184,10 +194,15 @@ export default function Dashboard({ user }: { user: UserProfile }) {
   const ongoingProjects = evaluatedProjects.filter(p => p.progress > 0 && p.progress < 100).length;
   const notStartedProjects = evaluatedProjects.filter(p => p.progress === 0).length;
   
-  // Real-time delay status counts
+  // Real-time delay status counts & critical projects list
   const onTrackCount = evaluatedProjects.filter(p => p.delayStatus === 'on_track').length;
   const slightDelayCount = evaluatedProjects.filter(p => p.delayStatus === 'slight_delay').length;
-  const criticalDelayCount = evaluatedProjects.filter(p => p.delayStatus === 'critical').length;
+  const criticalProjects = useMemo(() => {
+    return evaluatedProjects
+      .filter(p => p.delayStatus === 'critical')
+      .sort((a, b) => a.deviation - b.deviation); // Urutkan dari yang deviasinya paling minus
+  }, [evaluatedProjects]);
+  const criticalDelayCount = criticalProjects.length;
 
   // Total Nilai Anggaran Proyek
   const totalBudget = useMemo(() => {
@@ -241,9 +256,25 @@ export default function Dashboard({ user }: { user: UserProfile }) {
     ].filter(d => d.value > 0);
   }, [onTrackCount, slightDelayCount, criticalDelayCount, completedProjects, notStartedProjects]);
 
-  // Chart 2: Top Projects interactive comparison bar data
+  // Chart 2: Top Projects interactive comparison bar data with dynamic sorting:
+  // - Nilai Anggaran: diurutkan dari terbesar ke terkecil
+  // - Progres: diurutkan dari terkecil ke terbesar
+  // - Deviasi Waktu: diurutkan dari terkecil (paling minus/terlambat) ke terbesar
   const topProjectsData = useMemo(() => {
-    return filteredProjects.slice(0, 8).map(p => ({
+    const sorted = [...filteredProjects].sort((a, b) => {
+      if (chartViewMode === 'budget') {
+        // Terbesar ke terkecil
+        return (Number(b.anggaran) || 0) - (Number(a.anggaran) || 0);
+      }
+      if (chartViewMode === 'progress') {
+        // Terkecil ke terbesar
+        return (Number(a.progress) || 0) - (Number(b.progress) || 0);
+      }
+      // Deviasi Waktu: terkecil (paling minus/terlambat) ke terbesar
+      return (Number(a.deviation) || 0) - (Number(b.deviation) || 0);
+    });
+
+    return sorted.slice(0, 10).map(p => ({
       id: p.id,
       name: p.name.length > 18 ? p.name.substring(0, 18) + '...' : p.name,
       fullName: p.name,
@@ -253,7 +284,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
       delayStatus: p.delayStatus,
       ptCv: p.ptCv
     }));
-  }, [filteredProjects]);
+  }, [filteredProjects, chartViewMode]);
 
   // Provider SKP calculation
   const totalProviders = providers.length;
@@ -274,13 +305,34 @@ export default function Dashboard({ user }: { user: UserProfile }) {
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-200">
       
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Dashboard Monitoring</h2>
-          <p className="text-xs sm:text-sm text-slate-500">
-            Ringkasan statistik interaktif nilai anggaran, progres fisik, dan status keterlambatan real-time.
-          </p>
+      {/* Page Header with Logo placed directly above Dashboard Monitoring title */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200/60 pb-5">
+        <div className="space-y-3">
+          {/* Logo placed directly above the title */}
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white rounded-2xl shadow-sm border border-slate-200/80 flex items-center justify-center shrink-0">
+              <AppLogo />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-none flex items-center gap-1.5">
+                <span className="text-emerald-600">e-AWAS</span>
+                <span>Pro</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                Sistem Monitoring Proyek Pemerintah
+              </span>
+            </div>
+          </div>
+
+          {/* Dashboard Monitoring Title directly below the Logo */}
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              Dashboard Monitoring
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Ringkasan statistik interaktif nilai anggaran, progres fisik, dan status keterlambatan real-time.
+            </p>
+          </div>
         </div>
 
         {/* Quick Filter Reset Indicator */}
@@ -294,6 +346,123 @@ export default function Dashboard({ user }: { user: UserProfile }) {
           </button>
         )}
       </div>
+
+      {/* ============================================================== */}
+      {/* NOTIFIKASI OTOMATIS: PERINGATAN DEVIASI WAKTU KRITIS (> 10%)    */}
+      {/* ============================================================== */}
+      {criticalDelayCount > 0 && !isAlertBannerDismissed && (
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white shadow-xl shadow-red-950/20 border border-red-500/40 p-5 sm:p-6 animate-in slide-in-from-top-3 duration-300">
+          {/* Subtle warning backdrop flare */}
+          <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-4">
+            
+            {/* Title & Icon */}
+            <div className="flex items-start gap-3.5 flex-1">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 shadow-inner border border-white/20 animate-pulse">
+                <Bell size={24} className="stroke-[2.5px]" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-white text-red-700 text-[11px] font-black uppercase tracking-wider shadow-xs">
+                    Peringatan Kritis
+                  </span>
+                  <span className="text-xs text-red-100 font-semibold">
+                    Syarat-Syarat Umum Kontrak (SSUK) B.6
+                  </span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-black text-white leading-tight">
+                  Terdapat {criticalDelayCount} Proyek dengan Deviasi Waktu Kritis (&gt; 10%)
+                </h3>
+                <p className="text-xs sm:text-sm text-red-100 max-w-2xl leading-relaxed">
+                  Kemajuan fisik lapangan mengalami keterlambatan melebihi batas toleransi 10% dari rencana kalender kontrak. Diperlukan tindakan percepatan dan rapat pembuktian <em>(Show Cause Meeting / SCM)</em> serta penerbitan Surat Peringatan (SP).
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Actions Panel */}
+            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAlertDetailsExpanded(!isAlertDetailsExpanded)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold backdrop-blur-sm transition-all cursor-pointer active:scale-95"
+                title={isAlertDetailsExpanded ? 'Sembunyikan daftar proyek' : 'Lihat daftar proyek kritis'}
+              >
+                <span>{isAlertDetailsExpanded ? 'Tutup Rincian' : 'Lihat Rincian'}</span>
+                {isAlertDetailsExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedFilter(selectedFilter === 'critical' ? 'all' : 'critical')}
+                className="px-4 py-2 rounded-xl bg-white text-red-700 hover:bg-red-50 text-xs font-black shadow-md transition-all cursor-pointer active:scale-95"
+              >
+                {selectedFilter === 'critical' ? 'Lihat Semua' : 'Filter Proyek Kritis'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsAlertBannerDismissed(true)}
+                className="p-2 rounded-xl hover:bg-white/20 text-red-100 hover:text-white transition-colors cursor-pointer"
+                title="Tutup banner peringatan sementara"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+          </div>
+
+          {/* Collapsible Details List of Critical Projects */}
+          {isAlertDetailsExpanded && (
+            <div className="relative z-10 mt-5 pt-4 border-t border-white/20 space-y-2.5">
+              <p className="text-xs font-bold text-red-100 uppercase tracking-wider flex items-center gap-1.5">
+                <FileWarning size={14} />
+                Daftar Paket Proyek Memerlukan Tindakan Segera:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {criticalProjects.map((cp) => (
+                  <div
+                    key={cp.id}
+                    className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/15 transition-all text-xs flex flex-col justify-between space-y-2"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-1.5 mb-1">
+                        <h5 className="font-bold text-white text-xs line-clamp-1" title={cp.name}>
+                          {cp.name}
+                        </h5>
+                        <span className="shrink-0 px-2 py-0.5 rounded-md bg-white text-red-700 font-black text-[10px] font-mono">
+                          Deviasi {cp.deviation}%
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-red-100 line-clamp-1">
+                        Penyedia: <strong className="text-white">{cp.ptCv}</strong>
+                      </p>
+                      <p className="text-[10px] text-red-200 mt-0.5">
+                        Fisik: <strong>{cp.progress}%</strong> | Waktu Kalender: <strong>{cp.timeProgressPercent}%</strong>
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-white/15 flex items-center justify-between text-[11px]">
+                      <span className="text-[10px] text-red-200 font-mono">
+                        {cp.daysRemaining} hari tersisa
+                      </span>
+                      <Link
+                        to="/kurva-s"
+                        className="inline-flex items-center gap-1 text-white font-bold hover:underline"
+                        title="Periksa Kurva S & Terbitkan Surat Peringatan"
+                      >
+                        Kurva S &amp; SP <ArrowUpRight size={13} />
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
 
       {/* ============================================================== */}
       {/* 1. ROW STATISTIK UTAMA (ANGGARAN, REALISASI, STATUS)            */}
@@ -363,44 +532,49 @@ export default function Dashboard({ user }: { user: UserProfile }) {
                   Visualisasi Komparasi Paket Proyek
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Menampilkan {topProjectsData.length} proyek {selectedFilter !== 'all' ? `(Filter: ${selectedFilter})` : 'teratas'}.
+                  {chartViewMode === 'budget' && 'Urutan: Nilai Anggaran Terbesar ➔ Terkecil'}
+                  {chartViewMode === 'progress' && 'Urutan: Progres Terkecil ➔ Terbesar (Prioritas Pengawasan)'}
+                  {chartViewMode === 'delay' && 'Urutan: Deviasi Paling Terlambat/Minus ➔ Sesuai Jadwal'}
                 </p>
               </div>
 
-              {/* Chart Mode Switcher Buttons */}
+              {/* Chart Mode Switcher Buttons with dynamic sorting */}
               <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 self-start sm:self-auto">
                 <button
                   type="button"
                   onClick={() => setChartViewMode('budget')}
+                  title="Urutkan dari nilai anggaran terbesar ke terkecil"
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                     chartViewMode === 'budget' 
-                      ? 'bg-white text-emerald-700 shadow-xs' 
+                      ? 'bg-white text-emerald-700 shadow-xs ring-1 ring-emerald-500/20' 
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Nilai Anggaran
+                  Nilai Anggaran (↓)
                 </button>
                 <button
                   type="button"
                   onClick={() => setChartViewMode('progress')}
+                  title="Urutkan dari progres terkecil ke terbesar"
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                     chartViewMode === 'progress' 
-                      ? 'bg-white text-blue-700 shadow-xs' 
+                      ? 'bg-white text-blue-700 shadow-xs ring-1 ring-blue-500/20' 
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Progres (%)
+                  Progres (↑)
                 </button>
                 <button
                   type="button"
                   onClick={() => setChartViewMode('delay')}
+                  title="Urutkan dari deviasi terkecil / paling terlambat ke terbesar"
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                     chartViewMode === 'delay' 
-                      ? 'bg-white text-red-700 shadow-xs' 
+                      ? 'bg-white text-red-700 shadow-xs ring-1 ring-red-500/20' 
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Deviasi Waktu
+                  Deviasi Waktu (↑)
                 </button>
               </div>
             </div>

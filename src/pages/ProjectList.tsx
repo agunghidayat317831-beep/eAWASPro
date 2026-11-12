@@ -18,7 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   User,
-  MessageSquare
+  MessageSquare,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -48,6 +49,7 @@ export default function ProjectList({ user }: { user: UserProfile }) {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterProgress, setFilterProgress] = useState('all');
+  const [filterYear, setFilterYear] = useState('all');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -271,6 +273,44 @@ export default function ProjectList({ user }: { user: UserProfile }) {
     }
   };
 
+  // Helper to extract year from project data (contractDate, spmkDate, contractNumber, or createdAt)
+  const getProjectYear = (p: Project): string => {
+    if (p.contractDate) {
+      const match = p.contractDate.match(/^(\d{4})/);
+      if (match) return match[1];
+    }
+    if (p.spmkDate) {
+      const match = p.spmkDate.match(/^(\d{4})/);
+      if (match) return match[1];
+    }
+    if (p.contractNumber) {
+      const match = p.contractNumber.match(/\b(20\d{2})\b/);
+      if (match) return match[1];
+    }
+    if (p.createdAt) {
+      try {
+        const d = p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt);
+        if (!isNaN(d.getTime())) return d.getFullYear().toString();
+      } catch (e) {
+        // ignore
+      }
+    }
+    return '';
+  };
+
+  // Get unique list of years from existing projects
+  const availableYears = React.useMemo(() => {
+    const yearsSet = new Set<string>();
+    projects.forEach(p => {
+      const y = getProjectYear(p);
+      if (y) yearsSet.add(y);
+    });
+    // Ensure current year is present as reference
+    const currentYear = new Date().getFullYear().toString();
+    yearsSet.add(currentYear);
+    return Array.from(yearsSet).sort((a, b) => b.localeCompare(a));
+  }, [projects]);
+
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          p.ptCv.toLowerCase().includes(searchTerm.toLowerCase());
@@ -278,7 +318,11 @@ export default function ProjectList({ user }: { user: UserProfile }) {
                          filterProgress === '100' ? p.progress === 100 :
                          filterProgress === 'ongoing' ? p.progress > 0 && p.progress < 100 :
                          p.progress === 0;
-    return matchesSearch && matchesFilter;
+
+    const projectYear = getProjectYear(p);
+    const matchesYear = filterYear === 'all' ? true : projectYear === filterYear;
+
+    return matchesSearch && matchesFilter && matchesYear;
   });
 
   return (
@@ -310,18 +354,57 @@ export default function ProjectList({ user }: { user: UserProfile }) {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter className="text-slate-400 shrink-0" size={18} />
-          <select 
-            className="w-full sm:w-auto px-3 py-2.5 sm:py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all bg-white"
-            value={filterProgress}
-            onChange={(e) => setFilterProgress(e.target.value)}
-          >
-            <option value="all">Semua Progress</option>
-            <option value="100">Selesai (100%)</option>
-            <option value="ongoing">Berjalan (1-99%)</option>
-            <option value="0">Belum Mulai (0%)</option>
-          </select>
+
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Year Filter Dropdown */}
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+            <Calendar className="text-slate-400 shrink-0" size={18} />
+            <select 
+              className="w-full sm:w-auto px-3 py-2.5 sm:py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all bg-white text-slate-700 cursor-pointer"
+              value={filterYear}
+              onChange={(e) => setFilterYear(e.target.value)}
+              title="Filter Proyek Berdasarkan Tahun Anggaran"
+            >
+              <option value="all">Semua Tahun</option>
+              {availableYears.map(year => (
+                <option key={year} value={year}>
+                  Tahun {year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Progress Status Filter Dropdown */}
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+            <Filter className="text-slate-400 shrink-0" size={18} />
+            <select 
+              className="w-full sm:w-auto px-3 py-2.5 sm:py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all bg-white text-slate-700 cursor-pointer"
+              value={filterProgress}
+              onChange={(e) => setFilterProgress(e.target.value)}
+              title="Filter Proyek Berdasarkan Status Progres"
+            >
+              <option value="all">Semua Progress</option>
+              <option value="100">Selesai (100%)</option>
+              <option value="ongoing">Berjalan (1-99%)</option>
+              <option value="0">Belum Mulai (0%)</option>
+            </select>
+          </div>
+
+          {/* Reset button if any filter is active */}
+          {(filterYear !== 'all' || filterProgress !== 'all' || searchTerm) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterYear('all');
+                setFilterProgress('all');
+                setSearchTerm('');
+              }}
+              className="px-3 py-2.5 sm:py-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition-colors"
+              title="Reset semua filter"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
 
