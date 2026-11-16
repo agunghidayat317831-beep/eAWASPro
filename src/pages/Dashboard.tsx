@@ -100,9 +100,9 @@ export default function Dashboard({ user }: { user: UserProfile }) {
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [chartViewMode, setChartViewMode] = useState<'budget' | 'progress' | 'delay'>('budget');
 
-  // Automatic Critical Delay Alert Banner States
+  // Automatic Critical Delay Alert Banner States (minimized by default)
   const [isAlertBannerDismissed, setIsAlertBannerDismissed] = useState<boolean>(false);
-  const [isAlertDetailsExpanded, setIsAlertDetailsExpanded] = useState<boolean>(true);
+  const [isAlertMinimized, setIsAlertMinimized] = useState<boolean>(true);
 
   useEffect(() => {
     const unsubscribeProjects = getProjects((data) => {
@@ -351,116 +351,171 @@ export default function Dashboard({ user }: { user: UserProfile }) {
       {/* NOTIFIKASI OTOMATIS: PERINGATAN DEVIASI WAKTU KRITIS (> 10%)    */}
       {/* ============================================================== */}
       {criticalDelayCount > 0 && !isAlertBannerDismissed && (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white shadow-xl shadow-red-950/20 border border-red-500/40 p-5 sm:p-6 animate-in slide-in-from-top-3 duration-300">
+        <div
+          className={`relative overflow-hidden bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white shadow-lg shadow-red-950/15 border border-red-500/40 transition-all duration-300 animate-in slide-in-from-top-3 ${
+            isAlertMinimized ? 'rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3' : 'rounded-3xl p-5 sm:p-6 shadow-xl'
+          }`}
+        >
           {/* Subtle warning backdrop flare */}
           <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
 
-          <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-4">
-            
-            {/* Title & Icon */}
-            <div className="flex items-start gap-3.5 flex-1">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 shadow-inner border border-white/20 animate-pulse">
-                <Bell size={24} className="stroke-[2.5px]" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-white text-red-700 text-[11px] font-black uppercase tracking-wider shadow-xs">
+          {isAlertMinimized ? (
+            /* MINIMIZED COMPACT BAR */
+            <div className="relative z-10 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setIsAlertMinimized(false)}
+                className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer group"
+                title="Klik untuk memperluas rincian peringatan kritis"
+              >
+                <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 border border-white/20">
+                  <Bell size={16} className="stroke-[2.5px] animate-pulse" />
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
+                  <span className="px-2 py-0.5 rounded-md bg-white text-red-700 text-[10px] font-black uppercase tracking-wider shrink-0 shadow-xs">
                     Peringatan Kritis
                   </span>
-                  <span className="text-xs text-red-100 font-semibold">
-                    Syarat-Syarat Umum Kontrak (SSUK) B.6
+                  <span className="text-xs sm:text-sm font-bold text-white truncate group-hover:underline">
+                    {criticalDelayCount} Proyek Deviasi Waktu Kritis (&gt; 10%)
                   </span>
                 </div>
-                <h3 className="text-lg sm:text-xl font-black text-white leading-tight">
-                  Terdapat {criticalDelayCount} Proyek dengan Deviasi Waktu Kritis (&gt; 10%)
-                </h3>
-                <p className="text-xs sm:text-sm text-red-100 max-w-2xl leading-relaxed">
-                  Kemajuan fisik lapangan mengalami keterlambatan melebihi batas toleransi 10% dari rencana kalender kontrak. Diperlukan tindakan percepatan dan rapat pembuktian <em>(Show Cause Meeting / SCM)</em> serta penerbitan Surat Peringatan (SP).
-                </p>
+              </button>
+
+              <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setSelectedFilter(selectedFilter === 'critical' ? 'all' : 'critical')}
+                  className="px-2.5 py-1.5 rounded-lg bg-white text-red-700 hover:bg-red-50 text-[11px] font-black shadow-xs transition-all cursor-pointer active:scale-95"
+                >
+                  {selectedFilter === 'critical' ? 'Lihat Semua' : 'Filter Kritis'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAlertMinimized(false)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold backdrop-blur-sm transition-all cursor-pointer active:scale-95"
+                  title="Lihat rincian lengkap"
+                >
+                  <span>Rincian</span>
+                  <ChevronDown size={14} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAlertBannerDismissed(true)}
+                  className="p-1.5 rounded-lg hover:bg-white/20 text-red-100 hover:text-white transition-colors cursor-pointer"
+                  title="Tutup notifikasi"
+                >
+                  <X size={15} />
+                </button>
               </div>
             </div>
-
-            {/* Quick Actions Panel */}
-            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsAlertDetailsExpanded(!isAlertDetailsExpanded)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold backdrop-blur-sm transition-all cursor-pointer active:scale-95"
-                title={isAlertDetailsExpanded ? 'Sembunyikan daftar proyek' : 'Lihat daftar proyek kritis'}
-              >
-                <span>{isAlertDetailsExpanded ? 'Tutup Rincian' : 'Lihat Rincian'}</span>
-                {isAlertDetailsExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedFilter(selectedFilter === 'critical' ? 'all' : 'critical')}
-                className="px-4 py-2 rounded-xl bg-white text-red-700 hover:bg-red-50 text-xs font-black shadow-md transition-all cursor-pointer active:scale-95"
-              >
-                {selectedFilter === 'critical' ? 'Lihat Semua' : 'Filter Proyek Kritis'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsAlertBannerDismissed(true)}
-                className="p-2 rounded-xl hover:bg-white/20 text-red-100 hover:text-white transition-colors cursor-pointer"
-                title="Tutup banner peringatan sementara"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-          </div>
-
-          {/* Collapsible Details List of Critical Projects */}
-          {isAlertDetailsExpanded && (
-            <div className="relative z-10 mt-5 pt-4 border-t border-white/20 space-y-2.5">
-              <p className="text-xs font-bold text-red-100 uppercase tracking-wider flex items-center gap-1.5">
-                <FileWarning size={14} />
-                Daftar Paket Proyek Memerlukan Tindakan Segera:
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {criticalProjects.map((cp) => (
-                  <div
-                    key={cp.id}
-                    className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/15 transition-all text-xs flex flex-col justify-between space-y-2"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-1.5 mb-1">
-                        <h5 className="font-bold text-white text-xs line-clamp-1" title={cp.name}>
-                          {cp.name}
-                        </h5>
-                        <span className="shrink-0 px-2 py-0.5 rounded-md bg-white text-red-700 font-black text-[10px] font-mono">
-                          Deviasi {cp.deviation}%
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-red-100 line-clamp-1">
-                        Penyedia: <strong className="text-white">{cp.ptCv}</strong>
-                      </p>
-                      <p className="text-[10px] text-red-200 mt-0.5">
-                        Fisik: <strong>{cp.progress}%</strong> | Waktu Kalender: <strong>{cp.timeProgressPercent}%</strong>
-                      </p>
-                    </div>
-
-                    <div className="pt-2 border-t border-white/15 flex items-center justify-between text-[11px]">
-                      <span className="text-[10px] text-red-200 font-mono">
-                        {cp.daysRemaining} hari tersisa
-                      </span>
-                      <Link
-                        to="/kurva-s"
-                        className="inline-flex items-center gap-1 text-white font-bold hover:underline"
-                        title="Periksa Kurva S & Terbitkan Surat Peringatan"
-                      >
-                        Kurva S &amp; SP <ArrowUpRight size={13} />
-                      </Link>
-                    </div>
+          ) : (
+            /* EXPANDED FULL DETAILS */
+            <>
+              <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-4">
+                {/* Title & Icon */}
+                <div className="flex items-start gap-3.5 flex-1">
+                  <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shrink-0 shadow-inner border border-white/20 animate-pulse">
+                    <Bell size={24} className="stroke-[2.5px]" />
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-white text-red-700 text-[11px] font-black uppercase tracking-wider shadow-xs">
+                        Peringatan Kritis
+                      </span>
+                      <span className="text-xs text-red-100 font-semibold">
+                        Syarat-Syarat Umum Kontrak (SSUK) B.6
+                      </span>
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-black text-white leading-tight">
+                      Terdapat {criticalDelayCount} Proyek dengan Deviasi Waktu Kritis (&gt; 10%)
+                    </h3>
+                    <p className="text-xs sm:text-sm text-red-100 max-w-2xl leading-relaxed">
+                      Kemajuan fisik lapangan mengalami keterlambatan melebihi batas toleransi 10% dari rencana kalender kontrak. Diperlukan tindakan percepatan dan rapat pembuktian <em>(Show Cause Meeting / SCM)</em> serta penerbitan Surat Peringatan (SP).
+                    </p>
+                  </div>
+                </div>
 
+                {/* Quick Actions Panel */}
+                <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsAlertMinimized(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold backdrop-blur-sm transition-all cursor-pointer active:scale-95"
+                    title="Perkecil peringatan kritis"
+                  >
+                    <span>Minimize</span>
+                    <ChevronUp size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFilter(selectedFilter === 'critical' ? 'all' : 'critical')}
+                    className="px-4 py-2 rounded-xl bg-white text-red-700 hover:bg-red-50 text-xs font-black shadow-md transition-all cursor-pointer active:scale-95"
+                  >
+                    {selectedFilter === 'critical' ? 'Lihat Semua' : 'Filter Proyek Kritis'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAlertBannerDismissed(true)}
+                    className="p-2 rounded-xl hover:bg-white/20 text-red-100 hover:text-white transition-colors cursor-pointer"
+                    title="Tutup banner peringatan sementara"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Details List of Critical Projects */}
+              <div className="relative z-10 mt-5 pt-4 border-t border-white/20 space-y-2.5">
+                <p className="text-xs font-bold text-red-100 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileWarning size={14} />
+                  Daftar Paket Proyek Memerlukan Tindakan Segera:
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {criticalProjects.map((cp) => (
+                    <div
+                      key={cp.id}
+                      className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/15 transition-all text-xs flex flex-col justify-between space-y-2"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-1.5 mb-1">
+                          <h5 className="font-bold text-white text-xs line-clamp-1" title={cp.name}>
+                            {cp.name}
+                          </h5>
+                          <span className="shrink-0 px-2 py-0.5 rounded-md bg-white text-red-700 font-black text-[10px] font-mono">
+                            Deviasi {cp.deviation}%
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-red-100 line-clamp-1">
+                          Penyedia: <strong className="text-white">{cp.ptCv}</strong>
+                        </p>
+                        <p className="text-[10px] text-red-200 mt-0.5">
+                          Fisik: <strong>{cp.progress}%</strong> | Waktu Kalender: <strong>{cp.timeProgressPercent}%</strong>
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-white/15 flex items-center justify-between text-[11px]">
+                        <span className="text-[10px] text-red-200 font-mono">
+                          {cp.daysRemaining} hari tersisa
+                        </span>
+                        <Link
+                          to="/kurva-s"
+                          className="inline-flex items-center gap-1 text-white font-bold hover:underline"
+                          title="Periksa Kurva S & Terbitkan Surat Peringatan"
+                        >
+                          Kurva S &amp; SP <ArrowUpRight size={13} />
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
