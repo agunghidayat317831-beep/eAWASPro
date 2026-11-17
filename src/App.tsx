@@ -8,8 +8,11 @@ import { UserProfile } from './types';
 import FloatingPillNav from './components/FloatingPillNav';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// Lazy-loaded Pages to prevent single-bundle failures and speed up initial render
-const Dashboard = lazy(() => import('./pages/Dashboard'));
+// Eagerly load primary entry pages so the main screen renders immediately without chunk waterfall
+import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
+
+// Lazy-loaded secondary pages
 const ProjectList = lazy(() => import('./pages/ProjectList'));
 const PhotoGallery = lazy(() => import('./pages/PhotoGallery'));
 const ProjectMap = lazy(() => import('./pages/ProjectMap'));
@@ -21,7 +24,6 @@ const PriceList = lazy(() => import('./pages/PriceList'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
 const RAB = lazy(() => import('./pages/RAB'));
 const TechnicalSpecs = lazy(() => import('./pages/TechnicalSpecs'));
-const Login = lazy(() => import('./pages/Login'));
 
 const PageLoader = () => (
   <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
@@ -42,16 +44,31 @@ export default function App() {
       if (isMounted) {
         setLoading(false);
       }
-    }, 6000);
+    }, 2500);
 
     const unsubscribe = onAuthStateChanged(
       auth,
       async (firebaseUser) => {
+        clearTimeout(safetyTimer);
         try {
           if (firebaseUser) {
-            let profile: UserProfile | null = null;
+            const isOwnerAdmin = firebaseUser.email === 'agunghidayat317831@gmail.com';
+            const fallbackProfile: UserProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              role: isOwnerAdmin ? 'admin' : 'user',
+            };
+
+            // Unblock UI immediately with fallback profile so Dashboard renders without waiting on Firestore
+            if (isMounted) {
+              setUser((prev) => (prev?.uid === firebaseUser.uid ? prev : fallbackProfile));
+              setLoading(false);
+            }
+
+            // Sync full Firestore profile in background
             try {
-              profile = await getUserProfile(firebaseUser.uid);
+              let profile = await getUserProfile(firebaseUser.uid);
 
               if (!profile && firebaseUser.email) {
                 const pendingProfile = await getUserProfileByEmail(firebaseUser.email);
@@ -71,43 +88,28 @@ export default function App() {
               }
 
               if (!profile) {
-                const newProfile: UserProfile = {
-                  uid: firebaseUser.uid,
-                  email: firebaseUser.email || '',
-                  name: firebaseUser.displayName || 'User',
-                  role: firebaseUser.email === 'agunghidayat317831@gmail.com' ? 'admin' : 'user',
-                };
-                await createUserProfile(newProfile);
-                profile = newProfile;
+                await createUserProfile(fallbackProfile);
+                profile = fallbackProfile;
+              }
+
+              if (profile && isOwnerAdmin) {
+                profile.role = 'admin';
+              }
+
+              if (isMounted && profile) {
+                setUser(profile);
               }
             } catch (profileErr) {
               console.error('Gagal memuat profil Firestore, menggunakan profil fallback:', profileErr);
-              profile = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email || '',
-                name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-                role: firebaseUser.email === 'agunghidayat317831@gmail.com' ? 'admin' : 'user',
-              };
-            }
-
-            if (profile && firebaseUser.email === 'agunghidayat317831@gmail.com') {
-              profile.role = 'admin';
-            }
-
-            if (isMounted) {
-              setUser(profile);
             }
           } else if (isMounted) {
             setUser(null);
+            setLoading(false);
           }
         } catch (err) {
           console.error('Auth state error:', err);
           if (isMounted) {
             setUser(null);
-          }
-        } finally {
-          clearTimeout(safetyTimer);
-          if (isMounted) {
             setLoading(false);
           }
         }

@@ -581,7 +581,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left: Recharts Dynamic Project Breakdown (Bar / Area Chart) */}
-        <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div className="lg:col-span-2 min-w-0 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
               <div>
@@ -651,7 +651,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
                   </button>
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={240}>
                   <BarChart data={topProjectsData} margin={{ top: 10, right: 10, left: -10, bottom: 25 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis 
@@ -734,7 +734,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
         </div>
 
         {/* Right: Real-time Keterlambatan Pie Chart & Interactive Filter */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div className="min-w-0 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -747,27 +747,34 @@ export default function Dashboard({ user }: { user: UserProfile }) {
             </div>
 
             <div className="h-[210px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={delayPieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={75}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {delayPieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                    formatter={(val: any) => [`${val} Proyek`, 'Jumlah']}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              {delayPieData.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center text-slate-400">
+                  <Activity size={28} className="mb-1.5 text-slate-300" />
+                  <p className="text-xs font-semibold">Belum ada data status proyek</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
+                  <PieChart>
+                    <Pie
+                      data={delayPieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={75}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {delayPieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                      formatter={(val: any) => [`${val} Proyek`, 'Jumlah']}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </div>
 
             {/* Interactive Legend with filter trigger */}

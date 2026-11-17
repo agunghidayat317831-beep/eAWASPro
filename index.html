@@ -10,12 +10,49 @@
   </head>
   <body>
     <div id="root">
-      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;font-family:system-ui,-apple-system,sans-serif;color:#475569;gap:12px;">
+      <div id="eawas-boot-loader" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;font-family:system-ui,-apple-system,sans-serif;color:#475569;gap:12px;padding:16px;text-align:center;">
         <div style="width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#059669;border-radius:9999px;animation:eawasSpin 0.8s linear infinite;"></div>
         <div style="font-size:13px;font-weight:600;">Memuat e-AWAS Pro...</div>
       </div>
       <style>@keyframes eawasSpin{to{transform:rotate(360deg);}}</style>
     </div>
+    <script>
+      (function () {
+        function showBootError(msg) {
+          if (window.__EAWAS_MOUNTED__) return;
+          var root = document.getElementById('root');
+          if (!root) return;
+          var safeMsg = String(msg || 'Gagal memuat skrip aplikasi.').replace(/[<>&]/g, function (c) {
+            return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c];
+          });
+          root.innerHTML =
+            '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-family:system-ui,-apple-system,sans-serif;padding:16px;">' +
+              '<div style="max-width:420px;width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:24px;text-align:center;box-shadow:0 10px 25px rgba(15,23,42,0.08);">' +
+                '<div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:8px;">Gagal Memuat Halaman</div>' +
+                '<div style="font-size:12px;color:#64748b;margin-bottom:14px;line-height:1.5;">Terjadi kendala saat memulai aplikasi di browser.</div>' +
+                '<div style="font-size:11px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px;margin-bottom:16px;word-break:break-word;text-align:left;font-family:monospace;">' + safeMsg + '</div>' +
+                '<button onclick="window.location.reload()" style="background:#059669;color:#fff;border:none;border-radius:12px;padding:10px 18px;font-size:12px;font-weight:700;cursor:pointer;">Muat Ulang Halaman</button>' +
+              '</div>' +
+            '</div>';
+        }
+        window.addEventListener('error', function (e) {
+          if (!window.__EAWAS_MOUNTED__) {
+            showBootError((e && (e.message || (e.error && e.error.message))) || 'Kesalahan skrip awal.');
+          }
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          if (!window.__EAWAS_MOUNTED__) {
+            var reason = e && e.reason;
+            showBootError((reason && reason.message) || reason || 'Promise gagal diproses saat memuat.');
+          }
+        });
+        setTimeout(function () {
+          if (!window.__EAWAS_MOUNTED__) {
+            showBootError('Waktu tunggu pemuatan modul habis. Periksa koneksi lalu muat ulang.');
+          }
+        }, 12000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

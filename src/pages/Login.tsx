@@ -172,7 +172,7 @@ export default function Login() {
       <style>{`
         .custom-auth-container {
           position: relative;
-          width: 850px;
+          width: min(850px, 100%);
           height: 550px;
           background: #ffffff;
           border-radius: 30px;
