@@ -510,7 +510,7 @@ export default function ProjectList({ user }: { user: UserProfile }) {
                     <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Anggaran</p>
                     <div className="flex items-center gap-1 text-slate-700 text-sm font-medium">
                       <Wallet size={14} className="text-slate-400" />
-                      <span>Rp {project.anggaran.toLocaleString('id-ID')}</span>
+                      <span>Rp {Number(project.anggaran || 0).toLocaleString('id-ID')}</span>
                     </div>
                   </div>
                 </div>

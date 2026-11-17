@@ -274,16 +274,19 @@ export default function Dashboard({ user }: { user: UserProfile }) {
       return (Number(a.deviation) || 0) - (Number(b.deviation) || 0);
     });
 
-    return sorted.slice(0, 10).map(p => ({
-      id: p.id,
-      name: p.name.length > 18 ? p.name.substring(0, 18) + '...' : p.name,
-      fullName: p.name,
-      progress: p.progress,
-      anggaranMiliar: Number(((p.anggaran || 0) / 1_000_000_000).toFixed(2)),
-      deviation: p.deviation,
-      delayStatus: p.delayStatus,
-      ptCv: p.ptCv
-    }));
+    return sorted.slice(0, 10).map(p => {
+      const safeName = String(p.name || 'Tanpa Nama');
+      return {
+        id: p.id,
+        name: safeName.length > 18 ? safeName.substring(0, 18) + '...' : safeName,
+        fullName: safeName,
+        progress: Number(p.progress) || 0,
+        anggaranMiliar: Number(((Number(p.anggaran) || 0) / 1_000_000_000).toFixed(2)),
+        deviation: Number(p.deviation) || 0,
+        delayStatus: p.delayStatus,
+        ptCv: p.ptCv || '-'
+      };
+    });
   }, [filteredProjects, chartViewMode]);
 
   // Provider SKP calculation
@@ -679,7 +682,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
                       }}
                       formatter={(val: any, name: any, item: any) => {
                         if (chartViewMode === 'budget') {
-                          return [`Rp ${(val * 1_000_000_000).toLocaleString('id-ID')}`, 'Nilai Anggaran'];
+                          return [`Rp ${(Number(val || 0) * 1_000_000_000).toLocaleString('id-ID')}`, 'Nilai Anggaran'];
                         }
                         if (chartViewMode === 'progress') {
                           return [`${val}%`, 'Progres Lapangan'];
@@ -894,7 +897,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
                       {project.ptCv}
                     </td>
                     <td className="px-6 py-4 text-sm font-mono font-bold text-slate-900">
-                      Rp {project.anggaran.toLocaleString('id-ID')}
+                      Rp {Number(project.anggaran || 0).toLocaleString('id-ID')}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">

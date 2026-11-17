@@ -151,7 +151,7 @@ export const getUsers = (callback: (users: UserProfile[]) => void) => {
     const users = snapshot.docs.map(doc => ({ ...doc.data() } as UserProfile));
     callback(users);
   }, (error) => {
-    handleFirestoreError(error, OperationType.LIST, path);
+    console.error(`Firestore listener error on ${path}:`, error);
   });
 };
 
@@ -208,15 +208,19 @@ export const getProjects = (callback: (projects: Project[]) => void) => {
       return { 
         id: doc.id, 
         ...data,
-        // Backward compatibility for renamed field
+        // Backward compatibility and safe defaults
         ptCv: data.ptCv || data.instansi || '',
         name: data.name || '',
-        location: data.location || ''
+        location: data.location || '',
+        anggaran: Number(data.anggaran) || 0,
+        progress: Number(data.progress) || 0,
+        lat: typeof data.lat === 'number' && !isNaN(data.lat) ? data.lat : -6.2088,
+        lng: typeof data.lng === 'number' && !isNaN(data.lng) ? data.lng : 106.8456,
       } as Project;
     });
     callback(projects);
   }, (error) => {
-    handleFirestoreError(error, OperationType.LIST, path);
+    console.error(`Firestore listener error on ${path}:`, error);
   });
 };
 
@@ -360,7 +364,7 @@ export const getProjectEvaluations = (callback: (evaluations: ProjectEvaluation[
     const evaluations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProjectEvaluation));
     callback(evaluations);
   }, (error) => {
-    handleFirestoreError(error, OperationType.LIST, path);
+    console.error(`Firestore listener error on ${path}:`, error);
   });
 };
 
@@ -424,7 +428,7 @@ export const getProviders = (callback: (providers: Provider[]) => void) => {
     });
     callback(providers);
   }, (error) => {
-    handleFirestoreError(error, OperationType.LIST, path);
+    console.error(`Firestore listener error on ${path}:`, error);
   });
 };
 
