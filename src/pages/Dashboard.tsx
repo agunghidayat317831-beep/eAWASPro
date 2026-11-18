@@ -138,16 +138,20 @@ export default function Dashboard({ user }: { user: UserProfile }) {
     
     return projects.map(p => {
       const spmk = p.spmkDate ? new Date(p.spmkDate) : (p.contractDate ? new Date(p.contractDate) : null);
-      const period = p.executionPeriod && p.executionPeriod > 0 ? p.executionPeriod : 120;
+      const hasValidDate = Boolean(spmk && !isNaN(spmk.getTime()));
+      const hasCustomPeriod = Boolean(p.executionPeriod && p.executionPeriod > 0);
+      const period = hasCustomPeriod ? Number(p.executionPeriod) : 120;
       
       let timeProgressPercent = 0;
       let daysElapsed = 0;
       let daysRemaining = period;
+      let overdueDays = 0;
 
-      if (spmk && !isNaN(spmk.getTime())) {
+      if (hasValidDate && spmk) {
         const diffTime = now.getTime() - spmk.getTime();
         daysElapsed = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
         daysRemaining = Math.max(0, period - daysElapsed);
+        overdueDays = Math.max(0, daysElapsed - period);
         timeProgressPercent = Math.min(100, Math.max(0, Math.round((daysElapsed / period) * 100)));
       }
 
@@ -178,8 +182,11 @@ export default function Dashboard({ user }: { user: UserProfile }) {
 
       return {
         ...p,
+        period,
+        hasSchedule: hasValidDate,
         daysElapsed,
         daysRemaining,
+        overdueDays,
         timeProgressPercent,
         deviation,
         delayStatus,
@@ -876,12 +883,13 @@ export default function Dashboard({ user }: { user: UserProfile }) {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[700px]">
+          <table className="w-full text-left min-w-[840px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-100">
                 <th className="px-6 py-4 font-semibold">Nama Proyek</th>
                 <th className="px-6 py-4 font-semibold">Penyedia (PT/CV)</th>
                 <th className="px-6 py-4 font-semibold">Nilai Anggaran</th>
+                <th className="px-6 py-4 font-semibold">Sisa Hari Kontrak</th>
                 <th className="px-6 py-4 font-semibold">Progres Fisik</th>
                 <th className="px-6 py-4 font-semibold">Status Keterlambatan</th>
               </tr>
@@ -889,7 +897,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
             <tbody className="divide-y divide-slate-100">
               {filteredProjects.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate-400 text-sm">
+                  <td colSpan={6} className="px-6 py-10 text-center text-slate-400 text-sm">
                     Tidak ada proyek yang sesuai dengan kriteria filter.
                   </td>
                 </tr>
@@ -905,6 +913,54 @@ export default function Dashboard({ user }: { user: UserProfile }) {
                     </td>
                     <td className="px-6 py-4 text-sm font-mono font-bold text-slate-900">
                       Rp {Number(project.anggaran || 0).toLocaleString('id-ID')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {project.delayStatus === 'completed' ? (
+                        <div className="inline-flex flex-col">
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                            <CheckCircle2 size={13} />
+                            Tuntas
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            Durasi {project.period} hari
+                          </span>
+                        </div>
+                      ) : !project.hasSchedule ? (
+                        <div className="inline-flex flex-col">
+                          <span className="text-xs font-semibold text-slate-400">-</span>
+                          <span className="text-[11px] text-slate-400">
+                            {project.executionPeriod && project.executionPeriod > 0
+                              ? `${project.executionPeriod} hari (SPMK kosong)`
+                              : 'Jadwal belum diisi'}
+                          </span>
+                        </div>
+                      ) : project.overdueDays > 0 ? (
+                        <div className="inline-flex flex-col">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200 text-xs font-bold font-mono w-fit">
+                            <Calendar size={12} />
+                            Lewat {project.overdueDays} hari
+                          </span>
+                          <span className="text-[11px] text-red-500 mt-0.5 font-medium">
+                            dari {project.period} hari kontrak
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex flex-col">
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs font-bold font-mono ${
+                              project.daysRemaining <= 14
+                                ? 'text-amber-600'
+                                : 'text-slate-800'
+                            }`}
+                          >
+                            <Calendar size={13} className={project.daysRemaining <= 14 ? 'text-amber-500' : 'text-emerald-600'} />
+                            {project.daysRemaining === 0 ? 'Hari terakhir' : `${project.daysRemaining} hari`}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            dari {project.period} hari kontrak
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
